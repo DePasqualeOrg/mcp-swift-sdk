@@ -1,0 +1,1 @@
+Thoroughly compare the Prompts functionality in Swift to the MCP spec (2025-11-25) and the Python and TypeScript SDKs, and fill in any gaps you find in Swift. The Swift implementation needs to closely adhere to the spec and align with the Python and TypeScript implementations. Ensure that the Swift implementation is complete and accurate.
