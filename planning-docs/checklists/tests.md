@@ -1,0 +1,44 @@
+- [x] Tools
+- [x] Resources
+- [x] Prompts
+- [x] Completions
+- [x] Sampling
+- [x] Elicitation
+- [x] Progress
+- [x] Cancellation
+- [x] Roots
+- [x] Capabilities
+- [x] Logging
+- [x] Notifications
+- [x] Tasks (experimental)
+- [x] Transports
+  - [x] stdio
+  - [x] Network
+  - [x] In-memory
+  - [x] Streamable HTTP
+    - [x] Server
+    - [x] Client
+- [x] Session management, lifecycle
+- [x] In-memory event store
+- [x] Initialization & Versioning
+- [x] Validation (JSON schema validation not yet implemented)
+- [ ] Integration/roundtrip tests
+- [x] Integration tests: compatibility with other SDKs
+  - [x] TypeScript – Swift
+    - [x] Swift client + TypeScript server
+    - [x] TypeScript client + Swift server
+
+  - [x] Python – Swift
+    - [x] Swift client + Python server
+    - [x] Python client + Swift server
+
+- [x] Error handling
+- [x] Concurrency
+- [x] Request Context
+- [x] OAuth (not yet implemented)
+- [x] Server metadata
+- [x] High-level API
+- [x] Examples
+  - [x] Hummingbird
+  - [x] Vapor
+
