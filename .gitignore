@@ -10,3 +10,13 @@ DerivedData/
 
 # Docs
 .docc-build
+
+node_modules
+bun.lock
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
