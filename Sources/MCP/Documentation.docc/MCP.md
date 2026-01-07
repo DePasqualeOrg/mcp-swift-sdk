@@ -18,80 +18,26 @@ Use the SDK to:
 
 ## Topics
 
-### Essentials
+### Guides
 
 - <doc:GettingStarted>
 - <doc:ClientGuide>
 - <doc:ServerGuide>
+- <doc:Transports>
+- <doc:Examples>
+- <doc:Debugging>
+- <doc:Experimental>
 
-### Client
+### Core
 
 - ``Client``
-
-### Server
-
 - ``Server``
 
 ### Transports
 
-- <doc:Transports>
 - ``Transport``
 - ``StdioTransport``
 - ``HTTPClientTransport``
 - ``HTTPServerTransport``
 - ``InMemoryTransport``
 - ``NetworkTransport``
-
-### Tools
-
-- ``Tool``
-- ``ListTools``
-- ``CallTool``
-
-### Resources
-
-- ``Resource``
-- ``ListResources``
-- ``ReadResource``
-- ``ResourceSubscribe``
-- ``ResourceUnsubscribe``
-
-### Prompts
-
-- ``Prompt``
-- ``ListPrompts``
-- ``GetPrompt``
-
-### Sampling
-
-- ``CreateSamplingMessage``
-- ``SamplingMessage``
-
-### Elicitation
-
-- ``Elicit``
-- ``ElicitationSchema``
-- ``ElicitResult``
-
-### Completions
-
-- ``Complete``
-- ``CompletionReference``
-
-### Progress and Notifications
-
-- ``ProgressNotification``
-- ``ProgressToken``
-- ``RequestMeta``
-
-### Protocol
-
-- ``Version``
-- ``MCPError``
-- ``ErrorCode``
-
-### Additional Guides
-
-- <doc:Examples>
-- <doc:Experimental>
-- <doc:Debugging>

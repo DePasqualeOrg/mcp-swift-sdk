@@ -106,4 +106,3 @@ Full documentation is available on [Swift Package Index](https://swiftpackageind
 - [Protocol Documentation](https://modelcontextprotocol.io)
 
 [mcp]: https://modelcontextprotocol.io
-[mcp-spec]: https://modelcontextprotocol.io/specification/2025-11-25

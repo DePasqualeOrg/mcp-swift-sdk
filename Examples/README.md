@@ -4,7 +4,7 @@ This directory contains example integrations showing how to build HTTP-based MCP
 
 ## Available Examples
 
-### [HummingbirdIntegration](./HummingbirdIntegration)
+### [Hummingbird Integration](./HummingbirdIntegration)
 
 Integration with [Hummingbird](https://github.com/hummingbird-project/hummingbird), a lightweight, flexible Swift web framework.
 
@@ -14,7 +14,7 @@ swift run
 # Server starts on http://localhost:3000/mcp
 ```
 
-### [VaporIntegration](./VaporIntegration)
+### [Vapor Integration](./VaporIntegration)
 
 Integration with [Vapor](https://vapor.codes/), a popular full-featured Swift web framework.
 
