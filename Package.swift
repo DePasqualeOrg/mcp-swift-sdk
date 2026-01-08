@@ -9,6 +9,8 @@ var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     .package(url: "https://github.com/mattt/eventsource.git", from: "1.1.0"),
     .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
+    // TODO: Remove after https://github.com/swiftlang/swift-docc/pull/1417 is merged
+    .package(url: "https://github.com/DePasqualeOrg/swift-docc.git", branch: "live-reload"),
 ]
 
 // Target dependencies needed on all platforms
