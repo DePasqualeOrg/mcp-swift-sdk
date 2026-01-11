@@ -80,7 +80,10 @@ struct FullRoundtripTests {
         await setUpToolHandlers(server)
 
         // Create transport in stateless mode (no sessionIdGenerator)
-        let transport = HTTPServerTransport()
+        // Disable DNS rebinding protection for direct handleRequest() testing
+        let transport = HTTPServerTransport(
+            options: .init(dnsRebindingProtection: .none)
+        )
         try await server.start(transport: transport)
 
         // Client 1 initializes
@@ -121,8 +124,12 @@ struct FullRoundtripTests {
         await setUpToolHandlers(server)
 
         let sessionId = UUID().uuidString
+        // Disable DNS rebinding protection for direct handleRequest() testing
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(
+                sessionIdGenerator: { sessionId },
+                dnsRebindingProtection: .none
+            )
         )
         try await server.start(transport: transport)
 
@@ -155,8 +162,12 @@ struct FullRoundtripTests {
         await setUpToolHandlers(server)
 
         let sessionId = UUID().uuidString
+        // Disable DNS rebinding protection for direct handleRequest() testing
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(
+                sessionIdGenerator: { sessionId },
+                dnsRebindingProtection: .none
+            )
         )
         try await server.start(transport: transport)
 
@@ -212,8 +223,12 @@ struct FullRoundtripTests {
         let server = createTestServer()
 
         let sessionId = UUID().uuidString
+        // Disable DNS rebinding protection for direct handleRequest() testing
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(
+                sessionIdGenerator: { sessionId },
+                dnsRebindingProtection: .none
+            )
         )
         try await server.start(transport: transport)
 
@@ -251,8 +266,12 @@ struct FullRoundtripTests {
         let server = createTestServer()
 
         let sessionId = UUID().uuidString
+        // Disable DNS rebinding protection for direct handleRequest() testing
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(
+                sessionIdGenerator: { sessionId },
+                dnsRebindingProtection: .none
+            )
         )
         try await server.start(transport: transport)
 
@@ -288,8 +307,12 @@ struct FullRoundtripTests {
         await setUpToolHandlers(server)
 
         let sessionId = UUID().uuidString
+        // Disable DNS rebinding protection for direct handleRequest() testing
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(
+                sessionIdGenerator: { sessionId },
+                dnsRebindingProtection: .none
+            )
         )
         try await server.start(transport: transport)
 
@@ -315,8 +338,12 @@ struct FullRoundtripTests {
         await setUpToolHandlers(server)
 
         let sessionId = UUID().uuidString
+        // Disable DNS rebinding protection for direct handleRequest() testing
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(
+                sessionIdGenerator: { sessionId },
+                dnsRebindingProtection: .none
+            )
         )
         try await server.start(transport: transport)
 

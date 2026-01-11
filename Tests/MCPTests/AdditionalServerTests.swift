@@ -76,7 +76,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -125,7 +125,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -182,7 +182,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -220,7 +220,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -253,7 +253,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -277,7 +277,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -303,7 +303,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -337,7 +337,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -378,7 +378,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -413,7 +413,7 @@ struct AdditionalServerTests {
         let sessionId = UUID().uuidString
 
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await server.start(transport: transport)
 
@@ -468,7 +468,8 @@ struct AdditionalServerTests {
                 sessionIdGenerator: { sessionId },
                 onSessionInitialized: { id in
                     await tracker.add("initialized:\(id)")
-                }
+                },
+                dnsRebindingProtection: .none
             )
         )
 
@@ -504,7 +505,8 @@ struct AdditionalServerTests {
                 sessionIdGenerator: { sessionId },
                 onSessionClosed: { id in
                     await tracker.add("closed:\(id)")
-                }
+                },
+                dnsRebindingProtection: .none
             )
         )
 
@@ -553,7 +555,8 @@ struct AdditionalServerTests {
                 },
                 onSessionClosed: { id in
                     await tracker.add("closed:\(id)")
-                }
+                },
+                dnsRebindingProtection: .none
             )
         )
 
@@ -607,7 +610,8 @@ struct AdditionalServerTests {
                 sessionIdGenerator: { sessionId1 },
                 onSessionClosed: { id in
                     await tracker.add(id)
-                }
+                },
+                dnsRebindingProtection: .none
             )
         )
 
@@ -621,7 +625,8 @@ struct AdditionalServerTests {
                 sessionIdGenerator: { sessionId2 },
                 onSessionClosed: { id in
                     await tracker.add(id)
-                }
+                },
+                dnsRebindingProtection: .none
             )
         )
 

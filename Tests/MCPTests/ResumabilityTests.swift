@@ -116,7 +116,8 @@ struct ResumabilityTests {
         let transport = HTTPServerTransport(
             options: .init(
                 sessionIdGenerator: { sessionId },
-                eventStore: eventStore
+                eventStore: eventStore,
+                dnsRebindingProtection: .none
             )
         )
         try await transport.connect()
@@ -184,7 +185,8 @@ struct ResumabilityTests {
         let transport = HTTPServerTransport(
             options: .init(
                 sessionIdGenerator: { sessionId },
-                eventStore: eventStore
+                eventStore: eventStore,
+                dnsRebindingProtection: .none
             )
         )
         try await transport.connect()
@@ -265,7 +267,8 @@ struct ResumabilityTests {
         let transport = HTTPServerTransport(
             options: .init(
                 sessionIdGenerator: { sessionId },
-                eventStore: eventStore
+                eventStore: eventStore,
+                dnsRebindingProtection: .none
             )
         )
         try await transport.connect()
@@ -346,7 +349,8 @@ struct ResumabilityTests {
         let transport = HTTPServerTransport(
             options: .init(
                 sessionIdGenerator: { sessionId },
-                eventStore: eventStore
+                eventStore: eventStore,
+                dnsRebindingProtection: .none
             )
         )
         try await transport.connect()
@@ -431,7 +435,8 @@ struct ResumabilityTests {
         let transport = HTTPServerTransport(
             options: .init(
                 sessionIdGenerator: { sessionId },
-                eventStore: eventStore
+                eventStore: eventStore,
+                dnsRebindingProtection: .none
             )
         )
         try await transport.connect()
@@ -454,7 +459,7 @@ struct ResumabilityTests {
 
         // Transport without event store
         let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { sessionId })
+            options: .init(sessionIdGenerator: { sessionId }, dnsRebindingProtection: .none)
         )
         try await transport.connect()
 
@@ -507,7 +512,8 @@ struct ResumabilityTests {
             options: .init(
                 sessionIdGenerator: { sessionId },
                 eventStore: eventStore,
-                retryInterval: 5000  // Include retry to make priming event more visible
+                retryInterval: 5000,  // Include retry to make priming event more visible
+                dnsRebindingProtection: .none
             )
         )
         try await transport.connect()
@@ -656,7 +662,8 @@ struct ResumabilityTests {
         let transport = HTTPServerTransport(
             options: .init(
                 sessionIdGenerator: { sessionId },
-                eventStore: eventStore
+                eventStore: eventStore,
+                dnsRebindingProtection: .none
             )
         )
         try await transport.connect()

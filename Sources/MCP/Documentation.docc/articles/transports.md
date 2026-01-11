@@ -75,38 +75,69 @@ Host MCP servers over HTTP. Integrates with any HTTP framework (Hummingbird, Vap
 
 **Platforms:** All platforms with Foundation
 
-### Security
+### DNS Rebinding Protection
 
-DNS rebinding attacks allow malicious websites to bypass browser same-origin policy and access local servers. The SDK provides built-in protection:
+DNS rebinding is an attack where malicious websites bypass browser same-origin policy to access local servers. This is a threat for MCP servers running on user machines.
+
+#### Local Development / Servers on User Machines
+
+Protection is enabled by default. The default settings protect localhost-bound servers:
 
 ```swift
-// Auto-configures DNS rebinding protection for localhost addresses
+// Default: DNS rebinding protection enabled for localhost
+let transport = HTTPServerTransport(
+    options: .init(sessionIdGenerator: { UUID().uuidString })
+)
+
+// Or use forBindAddress for explicit configuration
 let transport = HTTPServerTransport(
     options: .forBindAddress(
-        host: "127.0.0.1",
+        host: "localhost",
         port: 8080,
         sessionIdGenerator: { UUID().uuidString }
     )
 )
 ```
 
-When binding to localhost (`127.0.0.1`, `localhost`, or `::1`), `forBindAddress` automatically enables Host and Origin header validation. For non-localhost addresses, configure security manually if needed:
+#### Cloud / Container Deployments
+
+For cloud deployments (Docker, Kubernetes, etc.), DNS rebinding is not a threat since there's no local browser to exploit. Use `.none`:
 
 ```swift
 let transport = HTTPServerTransport(
     options: .init(
-        security: TransportSecuritySettings(
-            enableDnsRebindingProtection: true,
-            allowedHosts: ["myserver.local:8080"],
-            allowedOrigins: ["http://myserver.local:8080"]
+        sessionIdGenerator: { UUID().uuidString },
+        dnsRebindingProtection: .none  // Cloud deployment
+    )
+)
+
+// Or use forBindAddress with 0.0.0.0 (auto-detects cloud deployment)
+let transport = HTTPServerTransport(
+    options: .forBindAddress(
+        host: "0.0.0.0",
+        port: 8080,
+        sessionIdGenerator: { UUID().uuidString }
+    )
+)
+```
+
+#### Custom Host Validation
+
+For specific requirements like known proxy hosts:
+
+```swift
+let transport = HTTPServerTransport(
+    options: .init(
+        sessionIdGenerator: { UUID().uuidString },
+        dnsRebindingProtection: .custom(
+            allowedHosts: ["api.example.com:443"],
+            allowedOrigins: ["https://app.example.com"]
         )
     )
 )
 ```
 
-Additional security practices:
-- Bind to localhost rather than all interfaces (0.0.0.0) when possible
-- Implement proper authentication for all connections
+See ``DNSRebindingProtection`` for full documentation.
 
 ### Stateful Mode
 
@@ -144,6 +175,36 @@ Route incoming requests to the transport:
 // In your HTTP framework's handler
 func handleMCPRequest(_ request: HTTPRequest) async throws -> HTTPResponse {
     return try await transport.handleRequest(request)
+}
+```
+
+#### Host Header Handling
+
+DNS rebinding protection validates the `Host` header. When converting requests from your HTTP framework to `MCP.HTTPRequest`, ensure the Host header is included.
+
+**Vapor (NIOHTTP1):** Headers include Host automatically when iterating:
+```swift
+func extractHeaders(from req: Vapor.Request) -> [String: String] {
+    var headers: [String: String] = [:]
+    for (name, value) in req.headers {
+        headers[name] = value  // Host is included
+    }
+    return headers
+}
+```
+
+**Hummingbird (HTTPTypes):** Host is stored separately in `authority`:
+```swift
+func extractHeaders(from request: Hummingbird.Request) -> [String: String] {
+    var headers: [String: String] = [:]
+    for field in request.headers {
+        headers[field.name.rawName] = field.value
+    }
+    // HTTPTypes stores Host in authority (HTTP/2 :authority pseudo-header)
+    if let authority = request.head.authority {
+        headers["Host"] = authority
+    }
+    return headers
 }
 ```
 

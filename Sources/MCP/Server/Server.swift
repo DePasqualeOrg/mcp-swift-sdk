@@ -392,7 +392,7 @@ public actor Server {
 
         /// Closes the SSE stream for this request, triggering client reconnection.
         ///
-        /// Only available when using StreamableHTTPServerTransport with eventStore configured.
+        /// Only available when using HTTPServerTransport with eventStore configured.
         /// Use this to implement polling behavior during long-running operations -
         /// the client will reconnect after the retry interval specified in the priming event.
         ///
@@ -404,7 +404,7 @@ public actor Server {
 
         /// Closes the standalone GET SSE stream, triggering client reconnection.
         ///
-        /// Only available when using StreamableHTTPServerTransport with eventStore configured.
+        /// Only available when using HTTPServerTransport with eventStore configured.
         /// Use this to implement polling behavior for server-initiated notifications.
         ///
         /// This matches the TypeScript SDK's `extra.closeStandaloneSSEStream()` and
@@ -845,6 +845,9 @@ public actor Server {
     /// Tool cache for schema validation. Populated via `registerTools()`.
     var toolCache: [String: Tool] = [:]
 
+    /// Tool registry for DSL-based tools. Set via `registerTools(_:)` with a `ToolRegistry`.
+    var toolRegistry: ToolRegistry?
+
     public init(
         name: String,
         version: String,
@@ -1042,6 +1045,41 @@ public actor Server {
         }
     }
 
+    /// Register a tool registry for DSL-based tools.
+    ///
+    /// Tools from the registry will be added to the tool cache for validation
+    /// and the registry will be used for execution when using `withValidatedToolHandler()`.
+    ///
+    /// - Parameter registry: The tool registry containing DSL-based tools.
+    ///
+    /// Example:
+    /// ```swift
+    /// @Tool struct GetWeather { /* ... */ }
+    /// @Tool struct CreateEvent { /* ... */ }
+    ///
+    /// let registry = ToolRegistry {
+    ///     GetWeather.self
+    ///     CreateEvent.self
+    /// }
+    ///
+    /// await server.registerTools(registry)
+    ///
+    /// server.withRequestHandler(ListTools.self) { _, _ in
+    ///     ListTools.Result(tools: await server.registeredTools)
+    /// }
+    ///
+    /// server.withValidatedToolHandler { params, ctx in
+    ///     // DSL tools are automatically executed via the registry
+    ///     throw MCPError.invalidParams("Unknown tool: \(params.name)")
+    /// }
+    /// ```
+    public func registerTools(_ registry: ToolRegistry) async {
+        self.toolRegistry = registry
+        for tool in await registry.definitions {
+            toolCache[tool.name] = tool
+        }
+    }
+
     /// All tools registered for validation.
     ///
     /// Use this in your `ListTools` handler to return the registered tools:
@@ -1058,31 +1096,28 @@ public actor Server {
     ///
     /// This method wraps the `CallTool` handler with validation logic that:
     /// 1. Validates input arguments against the tool's `inputSchema`
-    /// 2. Calls your handler
+    /// 2. Executes DSL tools through the registry, or calls your handler for manual tools
     /// 3. Validates the result's `structuredContent` against the tool's `outputSchema` (if defined)
     ///
     /// Tools must be registered via `registerTools()` before calling this method.
     /// Unknown tools will receive an error response.
     ///
-    /// - Parameter handler: The tool execution handler.
+    /// - Parameter handler: The tool execution handler for manual (non-DSL) tools.
     ///
     /// Example:
     /// ```swift
-    /// server.registerTools([searchTool, createTool])
+    /// // Register DSL tools via registry
+    /// let registry = ToolRegistry { GetWeather.self; CreateEvent.self }
+    /// await server.registerTools(registry)
+    ///
+    /// // Register manual tools
+    /// server.registerTools([legacyTool])
     ///
     /// server.withValidatedToolHandler { params, ctx in
+    ///     // Only called for manual tools - DSL tools execute via registry
     ///     switch params.name {
-    ///     case "search":
-    ///         // Input already validated against searchTool.inputSchema
-    ///         let results = try await performSearch(params.arguments)
-    ///         return CallTool.Result(content: [.text(results)])
-    ///     case "create":
-    ///         let item = try await createItem(params.arguments)
-    ///         // If createTool.outputSchema is set, structuredContent will be validated
-    ///         return CallTool.Result(
-    ///             content: [.text("Created")],
-    ///             structuredContent: item.asValue()
-    ///         )
+    ///     case "legacy_tool":
+    ///         return CallTool.Result(content: [.text("Done")])
     ///     default:
     ///         throw MCPError.invalidParams("Unknown tool: \(params.name)")
     ///     }
@@ -1104,8 +1139,20 @@ public actor Server {
             let inputValue: Value = params.arguments.map { .object($0) } ?? .object([:])
             try self.validator.validate(inputValue, against: tool.inputSchema)
 
-            // Execute the handler
-            let result = try await handler(params, ctx)
+            // Execute: DSL tools through registry, manual tools through handler
+            let result: CallTool.Result
+            if let registry = await self.toolRegistry,
+               await registry.hasTool(name) {
+                // Create handler context for DSL tools
+                let context = HandlerContext(
+                    handlerContext: ctx,
+                    progressToken: ctx._meta?.progressToken
+                )
+                result = try await registry.execute(name, arguments: params.arguments, context: context)
+            } else {
+                // Manual tool - call handler
+                result = try await handler(params, ctx)
+            }
 
             // Validate output against outputSchema if present
             if let outputSchema = tool.outputSchema {

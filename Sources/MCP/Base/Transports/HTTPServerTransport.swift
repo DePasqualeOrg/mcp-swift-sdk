@@ -737,9 +737,8 @@ public actor HTTPServerTransport: Transport {
     /// by manipulating DNS responses. This is particularly dangerous for localhost servers
     /// as browsers may allow requests from attacker-controlled pages to local services.
     private func validateSecurityHeaders(_ request: HTTPRequest) -> HTTPResponse? {
-        guard let security = options.security,
-            security.enableDnsRebindingProtection
-        else {
+        let protection = options.dnsRebindingProtection
+        guard protection.isEnabled else {
             return nil
         }
 
@@ -754,7 +753,7 @@ public actor HTTPServerTransport: Transport {
             )
         }
 
-        let hostMatches = security.allowedHosts.contains { pattern in
+        let hostMatches = protection.allowedHosts.contains { pattern in
             matchesHostPattern(hostHeader, pattern: pattern)
         }
 
@@ -773,7 +772,7 @@ public actor HTTPServerTransport: Transport {
 
         // Validate Origin header (only if present - non-browser clients won't send it)
         if let originHeader = request.header(HTTPHeader.origin) {
-            let originMatches = security.allowedOrigins.contains { pattern in
+            let originMatches = protection.allowedOrigins.contains { pattern in
                 matchesOriginPattern(originHeader, pattern: pattern)
             }
 

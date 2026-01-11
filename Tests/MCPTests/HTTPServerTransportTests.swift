@@ -3,14 +3,39 @@ import Testing
 
 @testable import MCP
 
-@Suite("Streamable HTTP Server Transport Tests")
+// MARK: - Test Helpers
+
+/// Creates an HTTPServerTransport configured for testing with DNS rebinding protection disabled.
+/// Most tests don't send Host headers, so they need protection disabled to avoid 421 errors.
+private func testTransport(
+    sessionIdGenerator: (@Sendable () -> String)? = nil,
+    onSessionInitialized: (@Sendable (String) async -> Void)? = nil,
+    onSessionClosed: (@Sendable (String) async -> Void)? = nil,
+    enableJsonResponse: Bool = false,
+    eventStore: EventStore? = nil,
+    retryInterval: Int? = nil
+) -> HTTPServerTransport {
+    HTTPServerTransport(
+        options: .init(
+            sessionIdGenerator: sessionIdGenerator,
+            onSessionInitialized: onSessionInitialized,
+            onSessionClosed: onSessionClosed,
+            enableJsonResponse: enableJsonResponse,
+            eventStore: eventStore,
+            retryInterval: retryInterval,
+            dnsRebindingProtection: .none
+        )
+    )
+}
+
+@Suite("HTTP Server Transport Tests")
 struct HTTPServerTransportTests {
 
     // MARK: - Basic Initialization
 
     @Test("Stateless mode initialization")
     func statelessModeInitialization() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
 
         // Should not have a session ID in stateless mode
         let sessionId = await transport.sessionId
@@ -19,9 +44,7 @@ struct HTTPServerTransportTests {
 
     @Test("Stateful mode initialization")
     func statefulModeInitialization() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
-        )
+        let transport = testTransport(sessionIdGenerator: { UUID().uuidString })
 
         // Session ID not generated until initialize request
         let sessionId = await transport.sessionId
@@ -32,7 +55,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST requires correct Accept header")
     func postRequiresCorrectAcceptHeader() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Missing text/event-stream in Accept header
@@ -51,7 +74,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST requires Content-Type")
     func postRequiresContentType() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         let request = HTTPRequest(
@@ -68,7 +91,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST with valid initialize request")
     func postWithValidInitializeRequest() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         let initializeRequest =
@@ -91,7 +114,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST with notification only returns 202")
     func postWithNotificationOnlyReturns202() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // First initialize the transport
@@ -123,7 +146,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST with batch notifications returns 202")
     func postWithBatchNotificationsReturns202() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // First initialize the transport
@@ -157,7 +180,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST with invalid JSON returns parse error")
     func postWithInvalidJsonReturnsParseError() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // First initialize the transport
@@ -194,7 +217,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST with invalid JSON-RPC format returns error")
     func postWithInvalidJsonRpcFormatReturnsError() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // First initialize the transport
@@ -236,13 +259,11 @@ struct HTTPServerTransportTests {
         let store = SessionStore()
         let expectedSessionId = "test-session-123"
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { expectedSessionId },
-                onSessionInitialized: { sessionId in
-                    await store.set(sessionId)
-                }
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { expectedSessionId },
+            onSessionInitialized: { sessionId in
+                await store.set(sessionId)
+            }
         )
         try await transport.connect()
 
@@ -271,9 +292,7 @@ struct HTTPServerTransportTests {
 
     @Test("Stateful mode rejects invalid session ID")
     func statefulModeRejectsInvalidSessionId() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "valid-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "valid-session" })
         try await transport.connect()
 
         // First initialize
@@ -307,9 +326,7 @@ struct HTTPServerTransportTests {
 
     @Test("Stateful mode requires session ID after init")
     func statefulModeRequiresSessionIdAfterInit() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize
@@ -344,7 +361,7 @@ struct HTTPServerTransportTests {
 
     @Test("GET requires Accept header")
     func getRequiresAcceptHeader() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         let request = HTTPRequest(method: "GET", headers: [:])
@@ -355,7 +372,7 @@ struct HTTPServerTransportTests {
 
     @Test("GET returns SSE stream")
     func getReturnsSSEStream() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first (stateless mode - no session required)
@@ -381,7 +398,7 @@ struct HTTPServerTransportTests {
 
     @Test("GET rejects multiple SSE streams")
     func getRejectsMultipleSSEStreams() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize
@@ -419,11 +436,9 @@ struct HTTPServerTransportTests {
         }
         let state = ClosedState()
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                onSessionClosed: { _ in await state.markClosed() }
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "test-session" },
+            onSessionClosed: { _ in await state.markClosed() }
         )
         try await transport.connect()
 
@@ -455,7 +470,7 @@ struct HTTPServerTransportTests {
     @Test("DELETE in stateless mode returns 405")
     func deleteInStatelessModeReturns405() async throws {
         // Stateless mode (no session ID generator)
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -486,9 +501,7 @@ struct HTTPServerTransportTests {
 
     @Test("Session terminated - requests return 404")
     func sessionTerminatedRequestsReturn404() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize
@@ -541,7 +554,7 @@ struct HTTPServerTransportTests {
 
     @Test("Unsupported method returns 405")
     func unsupportedMethodReturns405() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         let request = HTTPRequest(method: "PUT", headers: [:])
@@ -555,7 +568,7 @@ struct HTTPServerTransportTests {
 
     @Test("Rejects unsupported protocol version")
     func rejectsUnsupportedProtocolVersion() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -591,9 +604,7 @@ struct HTTPServerTransportTests {
 
     @Test("JSON response mode only requires application/json Accept header")
     func jsonResponseModeOnlyRequiresJsonAcceptHeader() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(enableJsonResponse: true)
-        )
+        let transport = testTransport(enableJsonResponse: true)
         try await transport.connect()
 
         // Should succeed with only application/json (no text/event-stream required)
@@ -624,9 +635,7 @@ struct HTTPServerTransportTests {
 
     @Test("JSON response mode rejects request without application/json Accept header")
     func jsonResponseModeRejectsWithoutJsonAccept() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(enableJsonResponse: true)
-        )
+        let transport = testTransport(enableJsonResponse: true)
         try await transport.connect()
 
         // Should fail without application/json
@@ -647,9 +656,7 @@ struct HTTPServerTransportTests {
 
     @Test("SSE mode requires both Accept types")
     func sseModeRequiresBothAcceptTypes() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(enableJsonResponse: false)  // SSE mode (default)
-        )
+        let transport = testTransport(enableJsonResponse: false)  // SSE mode (default)
         try await transport.connect()
 
         // Should fail with only application/json (missing text/event-stream)
@@ -673,9 +680,7 @@ struct HTTPServerTransportTests {
 
     @Test("JSON response mode returns JSON")
     func jsonResponseModeReturnsJson() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(enableJsonResponse: true)
-        )
+        let transport = testTransport(enableJsonResponse: true)
         try await transport.connect()
 
         let initRequest = HTTPRequest(
@@ -713,9 +718,7 @@ struct HTTPServerTransportTests {
 
     @Test("Rejects double initialize")
     func rejectsDoubleInitialize() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
-        )
+        let transport = testTransport(sessionIdGenerator: { UUID().uuidString })
         try await transport.connect()
 
         // First initialize
@@ -755,7 +758,7 @@ struct HTTPServerTransportTests {
     @Test("DNS rebinding protection allows valid host")
     func dnsRebindingProtectionAllowsValidHost() async throws {
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost(port: 8080))
+            options: .init(dnsRebindingProtection: .localhost(port: 8080))
         )
         try await transport.connect()
 
@@ -778,7 +781,7 @@ struct HTTPServerTransportTests {
     @Test("DNS rebinding protection rejects invalid host")
     func dnsRebindingProtectionRejectsInvalidHost() async throws {
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost(port: 8080))
+            options: .init(dnsRebindingProtection: .localhost(port: 8080))
         )
         try await transport.connect()
 
@@ -802,7 +805,7 @@ struct HTTPServerTransportTests {
     @Test("DNS rebinding protection rejects missing host")
     func dnsRebindingProtectionRejectsMissingHost() async throws {
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost(port: 8080))
+            options: .init(dnsRebindingProtection: .localhost(port: 8080))
         )
         try await transport.connect()
 
@@ -826,7 +829,7 @@ struct HTTPServerTransportTests {
     @Test("DNS rebinding protection allows wildcard port")
     func dnsRebindingProtectionAllowsWildcardPort() async throws {
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost())  // Wildcard port
+            options: .init(dnsRebindingProtection: .localhost())  // Wildcard port
         )
         try await transport.connect()
 
@@ -853,7 +856,7 @@ struct HTTPServerTransportTests {
     @Test("DNS rebinding protection allows valid origin")
     func dnsRebindingProtectionAllowsValidOrigin() async throws {
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost(port: 8080))
+            options: .init(dnsRebindingProtection: .localhost(port: 8080))
         )
         try await transport.connect()
 
@@ -877,7 +880,7 @@ struct HTTPServerTransportTests {
     @Test("DNS rebinding protection rejects invalid origin")
     func dnsRebindingProtectionRejectsInvalidOrigin() async throws {
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost(port: 8080))
+            options: .init(dnsRebindingProtection: .localhost(port: 8080))
         )
         try await transport.connect()
 
@@ -902,7 +905,7 @@ struct HTTPServerTransportTests {
     func dnsRebindingProtectionAllowsRequestWithoutOrigin() async throws {
         // Non-browser clients (like curl) don't send Origin header
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost(port: 8080))
+            options: .init(dnsRebindingProtection: .localhost(port: 8080))
         )
         try await transport.connect()
 
@@ -923,10 +926,10 @@ struct HTTPServerTransportTests {
         #expect(response.statusCode == 200)
     }
 
-    @Test("DNS rebinding protection disabled by default")
-    func dnsRebindingProtectionDisabledByDefault() async throws {
-        // Without security settings, any host should be allowed
-        let transport = HTTPServerTransport()
+    @Test("DNS rebinding protection can be disabled with .none")
+    func dnsRebindingProtectionCanBeDisabled() async throws {
+        // With .none, any host should be allowed
+        let transport = testTransport()  // Uses dnsRebindingProtection: .none
         try await transport.connect()
 
         let request = HTTPRequest(
@@ -945,49 +948,78 @@ struct HTTPServerTransportTests {
         #expect(response.statusCode == 200)
     }
 
-    @Test("forBindAddress auto-enables for localhost")
-    func forBindAddressAutoEnablesForLocalhost() {
-        // Should return security settings for localhost addresses
-        #expect(TransportSecuritySettings.forBindAddress(host: "127.0.0.1", port: 8080) != nil)
-        #expect(TransportSecuritySettings.forBindAddress(host: "localhost", port: 3000) != nil)
-        #expect(TransportSecuritySettings.forBindAddress(host: "::1", port: 9000) != nil)
+    @Test("DNS rebinding protection enabled by default")
+    func dnsRebindingProtectionEnabledByDefault() async throws {
+        // Default is .localhost() - should reject requests without valid Host header
+        let transport = HTTPServerTransport()
+        try await transport.connect()
 
-        // Should return nil for other addresses (no protection needed)
-        #expect(TransportSecuritySettings.forBindAddress(host: "0.0.0.0", port: 8080) == nil)
-        #expect(TransportSecuritySettings.forBindAddress(host: "192.168.1.1", port: 8080) == nil)
+        // Request without Host header should be rejected
+        let request = HTTPRequest(
+            method: "POST",
+            headers: [
+                HTTPHeader.accept: "application/json, text/event-stream",
+                HTTPHeader.contentType: "application/json",
+                // No Host header
+            ],
+            body:
+                TestPayloads.initializeRequest()
+                .data(using: .utf8)
+        )
+
+        let response = await transport.handleRequest(request)
+        #expect(response.statusCode == 421)  // Misdirected Request
     }
 
-    @Test("HTTPServerTransportOptions.forBindAddress auto-configures security")
-    func optionsForBindAddressAutoConfiguresSecurity() {
+    @Test("forBindAddress returns appropriate protection for address")
+    func forBindAddressReturnsAppropriateProtection() {
+        // Should return .localhost for localhost addresses
+        let localhost1 = DNSRebindingProtection.forBindAddress(host: "127.0.0.1", port: 8080)
+        #expect(localhost1.isEnabled == true)
+
+        let localhost2 = DNSRebindingProtection.forBindAddress(host: "localhost", port: 3000)
+        #expect(localhost2.isEnabled == true)
+
+        let localhost3 = DNSRebindingProtection.forBindAddress(host: "::1", port: 9000)
+        #expect(localhost3.isEnabled == true)
+
+        // Should return .none for other addresses (cloud deployments)
+        let wildcard = DNSRebindingProtection.forBindAddress(host: "0.0.0.0", port: 8080)
+        #expect(wildcard.isEnabled == false)
+
+        let privateAddr = DNSRebindingProtection.forBindAddress(host: "192.168.1.1", port: 8080)
+        #expect(privateAddr.isEnabled == false)
+    }
+
+    @Test("HTTPServerTransportOptions.forBindAddress auto-configures protection")
+    func optionsForBindAddressAutoConfiguresProtection() {
         // For localhost, should auto-enable DNS rebinding protection
         let localhostOptions = HTTPServerTransportOptions.forBindAddress(host: "127.0.0.1", port: 8080)
-        #expect(localhostOptions.security != nil)
-        #expect(localhostOptions.security?.enableDnsRebindingProtection == true)
-        #expect(localhostOptions.security?.allowedHosts.contains("127.0.0.1:8080") == true)
+        #expect(localhostOptions.dnsRebindingProtection.isEnabled == true)
+        #expect(localhostOptions.dnsRebindingProtection.allowedHosts.contains("127.0.0.1:8080") == true)
 
-        // For 0.0.0.0, should not auto-enable security
+        // For 0.0.0.0, should disable protection (cloud deployment)
         let wildcardOptions = HTTPServerTransportOptions.forBindAddress(host: "0.0.0.0", port: 8080)
-        #expect(wildcardOptions.security == nil)
+        #expect(wildcardOptions.dnsRebindingProtection.isEnabled == false)
 
-        // Should allow explicit security override
-        let customSecurity = TransportSecuritySettings(
-            enableDnsRebindingProtection: true,
+        // Should allow explicit protection override
+        let customProtection = DNSRebindingProtection.custom(
             allowedHosts: ["custom.local:8080"],
             allowedOrigins: ["http://custom.local:8080"]
         )
         let overriddenOptions = HTTPServerTransportOptions.forBindAddress(
             host: "127.0.0.1",
             port: 8080,
-            security: customSecurity
+            dnsRebindingProtection: customProtection
         )
-        #expect(overriddenOptions.security?.allowedHosts.contains("custom.local:8080") == true)
-        #expect(overriddenOptions.security?.allowedHosts.contains("127.0.0.1:8080") == false)
+        #expect(overriddenOptions.dnsRebindingProtection.allowedHosts.contains("custom.local:8080") == true)
+        #expect(overriddenOptions.dnsRebindingProtection.allowedHosts.contains("127.0.0.1:8080") == false)
     }
 
     @Test("DNS rebinding protection rejects invalid host on GET")
     func dnsRebindingProtectionRejectsInvalidHostOnGet() async throws {
         let transport = HTTPServerTransport(
-            options: .init(security: .forLocalhost(port: 8080))
+            options: .init(dnsRebindingProtection: .localhost(port: 8080))
         )
         try await transport.connect()
 
@@ -1021,9 +1053,7 @@ struct HTTPServerTransportTests {
 
     @Test("Rejects unsupported protocol version on GET")
     func rejectsUnsupportedProtocolVersionOnGet() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize first
@@ -1054,9 +1084,7 @@ struct HTTPServerTransportTests {
 
     @Test("Rejects unsupported protocol version on DELETE")
     func rejectsUnsupportedProtocolVersionOnDelete() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize first
@@ -1086,9 +1114,7 @@ struct HTTPServerTransportTests {
 
     @Test("Accepts requests without protocol version header")
     func acceptsRequestsWithoutProtocolVersionHeader() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize
@@ -1130,11 +1156,9 @@ struct HTTPServerTransportTests {
         }
         let state = CallbackState()
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "valid-session" },
-                onSessionClosed: { _ in await state.markCalled() }
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "valid-session" },
+            onSessionClosed: { _ in await state.markCalled() }
         )
         try await transport.connect()
 
@@ -1166,9 +1190,7 @@ struct HTTPServerTransportTests {
     @Test("DELETE without callback works")
     func deleteWithoutCallbackWorks() async throws {
         // No onSessionClosed callback provided
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize
@@ -1197,9 +1219,7 @@ struct HTTPServerTransportTests {
 
     @Test("Batch initialize request rejected")
     func batchInitializeRequestRejected() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
-        )
+        let transport = testTransport(sessionIdGenerator: { UUID().uuidString })
         try await transport.connect()
 
         // Batch with initialize messages should be rejected
@@ -1224,9 +1244,7 @@ struct HTTPServerTransportTests {
 
     @Test("Rejects requests to uninitialized server")
     func rejectsRequestsToUninitializedServer() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Send a non-initialize request without first initializing
@@ -1251,9 +1269,7 @@ struct HTTPServerTransportTests {
 
     @Test("Rejects GET requests to uninitialized server")
     func rejectsGetRequestsToUninitializedServer() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Send a GET request without first initializing
@@ -1279,7 +1295,7 @@ struct HTTPServerTransportTests {
     @Test("Stateless mode accepts requests with any session ID")
     func statelessModeAcceptsAnySessionId() async throws {
         // No session ID generator = stateless mode
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -1320,7 +1336,7 @@ struct HTTPServerTransportTests {
 
     @Test("Stateless mode allows request without session ID")
     func statelessModeAllowsRequestWithoutSessionId() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -1354,7 +1370,7 @@ struct HTTPServerTransportTests {
     @Test("Stateless mode rejects requests before initialization")
     func statelessModeRejectsRequestsBeforeInit() async throws {
         // No session ID generator = stateless mode
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Try to send request without initializing first
@@ -1378,7 +1394,7 @@ struct HTTPServerTransportTests {
 
     @Test("Stateless mode rejects GET requests before initialization")
     func statelessModeRejectsGetBeforeInit() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Try GET without initializing first
@@ -1399,7 +1415,7 @@ struct HTTPServerTransportTests {
 
     @Test("Parse error returns -32700")
     func parseErrorReturns32700() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -1434,7 +1450,7 @@ struct HTTPServerTransportTests {
 
     @Test("Invalid request returns -32600")
     func invalidRequestReturns32600() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -1469,7 +1485,7 @@ struct HTTPServerTransportTests {
 
     @Test("Empty body returns parse error -32700")
     func emptyBodyReturnsParseError() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -1505,7 +1521,7 @@ struct HTTPServerTransportTests {
 
     @Test("Valid JSON but not JSON-RPC array returns parse error")
     func validJsonNotJsonRpcReturnsParseError() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -1540,7 +1556,7 @@ struct HTTPServerTransportTests {
 
     @Test("Wrong jsonrpc version returns invalid request error")
     func wrongJsonRpcVersionReturnsInvalidRequest() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -1589,9 +1605,7 @@ struct HTTPServerTransportTests {
         ]
 
         for validId in validSessionIds {
-            let transport = HTTPServerTransport(
-                options: .init(sessionIdGenerator: { validId })
-            )
+            let transport = testTransport(sessionIdGenerator: { validId })
             try await transport.connect()
 
             let initRequest = HTTPRequest(
@@ -1613,9 +1627,7 @@ struct HTTPServerTransportTests {
 
     @Test("Invalid session IDs rejected - space")
     func invalidSessionIdWithSpaceRejected() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "session with space" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "session with space" })
         try await transport.connect()
 
         let initRequest = HTTPRequest(
@@ -1644,9 +1656,7 @@ struct HTTPServerTransportTests {
         ]
 
         for invalidId in invalidIds {
-            let transport = HTTPServerTransport(
-                options: .init(sessionIdGenerator: { invalidId })
-            )
+            let transport = testTransport(sessionIdGenerator: { invalidId })
             try await transport.connect()
 
             let initRequest = HTTPRequest(
@@ -1667,9 +1677,7 @@ struct HTTPServerTransportTests {
 
     @Test("Invalid session IDs rejected - empty string")
     func invalidSessionIdEmptyRejected() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "" })
         try await transport.connect()
 
         let initRequest = HTTPRequest(
@@ -1692,11 +1700,9 @@ struct HTTPServerTransportTests {
     @Test("GET stream receives priming event with event store")
     func getStreamReceivesPrimingEventWithEventStore() async throws {
         let eventStore = InMemoryEventStore()
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                eventStore: eventStore
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "test-session" },
+            eventStore: eventStore
         )
         try await transport.connect()
 
@@ -1735,11 +1741,9 @@ struct HTTPServerTransportTests {
     @Test("GET stream does not receive priming event for old protocol version")
     func getStreamNoPrimingEventForOldProtocol() async throws {
         let eventStore = InMemoryEventStore()
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                eventStore: eventStore
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "test-session" },
+            eventStore: eventStore
         )
         try await transport.connect()
 
@@ -1777,9 +1781,7 @@ struct HTTPServerTransportTests {
     @Test("GET stream does not receive priming event without event store")
     func getStreamNoPrimingEventWithoutEventStore() async throws {
         // No event store configured
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize
@@ -1812,12 +1814,10 @@ struct HTTPServerTransportTests {
     @Test("Priming event includes retry interval when configured")
     func primingEventIncludesRetryInterval() async throws {
         let eventStore = InMemoryEventStore()
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                eventStore: eventStore,
-                retryInterval: 5000  // 5 seconds
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "test-session" },
+            eventStore: eventStore,
+            retryInterval: 5000  // 5 seconds
         )
         try await transport.connect()
 
@@ -1925,11 +1925,9 @@ struct HTTPServerTransportTests {
     @Test("GET with Last-Event-ID replays events")
     func getWithLastEventIdReplaysEvents() async throws {
         let eventStore = InMemoryEventStore()
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                eventStore: eventStore
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "test-session" },
+            eventStore: eventStore
         )
         try await transport.connect()
 
@@ -1973,11 +1971,9 @@ struct HTTPServerTransportTests {
     @Test("Protocol version stored after initialization")
     func protocolVersionStoredAfterInit() async throws {
         let eventStore = InMemoryEventStore()
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                eventStore: eventStore
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "test-session" },
+            eventStore: eventStore
         )
         try await transport.connect()
 
@@ -2004,7 +2000,7 @@ struct HTTPServerTransportTests {
 
     @Test("POST SSE response has correct Cache-Control header")
     func postSseResponseHasCorrectCacheControl() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         let initRequest = HTTPRequest(
@@ -2025,7 +2021,7 @@ struct HTTPServerTransportTests {
 
     @Test("GET SSE response has correct Cache-Control header")
     func getSseResponseHasCorrectCacheControl() async throws {
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize first
@@ -2062,13 +2058,11 @@ struct HTTPServerTransportTests {
         }
         let tracker = SessionTracker()
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "callback-test-session" },
-                onSessionInitialized: { sessionId in
-                    await tracker.set(sessionId)
-                }
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "callback-test-session" },
+            onSessionInitialized: { sessionId in
+                await tracker.set(sessionId)
+            }
         )
         try await transport.connect()
 
@@ -2098,13 +2092,11 @@ struct HTTPServerTransportTests {
         }
         let tracker = SessionTracker()
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "close-test-session" },
-                onSessionClosed: { sessionId in
-                    await tracker.setClosed(sessionId)
-                }
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "close-test-session" },
+            onSessionClosed: { sessionId in
+                await tracker.setClosed(sessionId)
+            }
         )
         try await transport.connect()
 
@@ -2141,13 +2133,11 @@ struct HTTPServerTransportTests {
         }
         let counter = CallCounter()
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "valid-session" },
-                onSessionClosed: { _ in
-                    await counter.increment()
-                }
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "valid-session" },
+            onSessionClosed: { _ in
+                await counter.increment()
+            }
         )
         try await transport.connect()
 
@@ -2181,7 +2171,7 @@ struct HTTPServerTransportTests {
     @Test("Terminated stateless transport returns 404")
     func terminatedStatelessTransportReturns404() async throws {
         // Stateless mode
-        let transport = HTTPServerTransport()
+        let transport = testTransport()
         try await transport.connect()
 
         // Initialize
@@ -2237,9 +2227,7 @@ struct HTTPServerTransportTests {
 
     @Test("Terminated stateful transport returns 404 for all requests")
     func terminatedStatefulTransportReturns404ForAll() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize
@@ -2285,11 +2273,9 @@ struct HTTPServerTransportTests {
         // was initiated—even if a stream was originally started for a specific client
         // request (via HTTP POST), the client will resume it via HTTP GET."
         let eventStore = InMemoryEventStore()
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                eventStore: eventStore
-            )
+        let transport = testTransport(
+            sessionIdGenerator: { "test-session" },
+            eventStore: eventStore
         )
         try await transport.connect()
 
@@ -2404,9 +2390,7 @@ struct HTTPServerTransportTests {
     func clientSendingResponseReturns202() async throws {
         // Per spec: For JSON-RPC response or notification input,
         // server returns 202 Accepted with no body
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize
@@ -2444,9 +2428,7 @@ struct HTTPServerTransportTests {
     func clientSendingErrorResponseReturns202() async throws {
         // Per spec: For JSON-RPC response (including error responses) input,
         // server returns 202 Accepted
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
+        let transport = testTransport(sessionIdGenerator: { "test-session" })
         try await transport.connect()
 
         // Initialize

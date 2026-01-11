@@ -26,24 +26,26 @@ swift run
 
 ## Architecture Pattern
 
-Both examples follow the same architecture pattern from the TypeScript SDK:
+Both examples use the high-level `MCPServer` API:
 
-1. **One Server instance** is shared across all HTTP clients
-2. **Each client session** gets its own `HTTPServerTransport`
-3. **SessionManager** tracks active transports by session ID
-4. **Request capture** ensures responses route to the correct client
+1. **One `MCPServer` instance** holds shared tool/resource/prompt definitions
+2. **Each client session** gets its own `Server` instance via `createSession()`
+3. **Each session** has its own `HTTPServerTransport`
+4. **Session manager** tracks active sessions by session ID
 
 ```
                     ┌─────────────────────────────┐
-                    │     MCP Server (shared)     │
-                    │   - Tool handlers           │
-                    │   - Resource handlers       │
+                    │   MCPServer (shared config) │
+                    │   - Tool definitions        │
+                    │   - Resource definitions    │
+                    │   - Prompt definitions      │
                     └─────────────┬───────────────┘
-                                  │
+                                  │ createSession()
         ┌─────────────────────────┼─────────────────────────┐
         │                         │                         │
         ▼                         ▼                         ▼
 ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+│   Server A    │       │   Server B    │       │   Server C    │
 │  Transport A  │       │  Transport B  │       │  Transport C  │
 │  (session-1)  │       │  (session-2)  │       │  (session-3)  │
 └───────┬───────┘       └───────┬───────┘       └───────┬───────┘
@@ -125,47 +127,58 @@ curl -X DELETE http://localhost:3000/mcp \
 
 ## Key Components
 
-### SessionManager
+### MCPServer
 
-The `SessionManager` actor provides thread-safe session storage:
+The high-level server that holds shared tool/resource/prompt definitions:
 
 ```swift
-let sessionManager = SessionManager(maxSessions: 100)
+let mcpServer = MCPServer(name: "my-server", version: "1.0.0")
 
-// Store a transport
-await sessionManager.store(transport, forSessionId: sessionId)
-
-// Get a transport
-if let transport = await sessionManager.transport(forSessionId: sessionId) {
-    // Use transport
+// Register tools using @Tool macro
+try await mcpServer.register {
+    Echo.self
+    Add.self
 }
 
-// Remove a transport
-await sessionManager.remove(sessionId)
-
-// Cleanup stale sessions
-await sessionManager.cleanupStaleSessions(olderThan: .seconds(3600))
+// Create per-session Server instances
+let session = await mcpServer.createSession()
 ```
 
 ### HTTPServerTransport
 
-The transport handles HTTP request/response multiplexing:
+Each session gets its own transport for HTTP request/response handling:
 
 ```swift
 let transport = HTTPServerTransport(
-    options: .init(
+    options: .forBindAddress(
+        host: "localhost",
+        port: 8080,
         sessionIdGenerator: { UUID().uuidString },
         onSessionInitialized: { sessionId in
             // Called when session is initialized
-            await sessionManager.store(transport, forSessionId: sessionId)
         },
         onSessionClosed: { sessionId in
             // Called when session is terminated (DELETE request)
-            await sessionManager.remove(sessionId)
         }
     )
 )
+
+// Start the session with the transport
+try await session.start(transport: transport)
 ```
+
+### BasicHTTPSessionManager (Optional)
+
+For simple demos and testing, `BasicHTTPSessionManager` handles session lifecycle automatically:
+
+```swift
+let sessionManager = BasicHTTPSessionManager(server: mcpServer, port: 8080)
+
+// In your HTTP route:
+let response = await sessionManager.handleRequest(httpRequest)
+```
+
+See ``BasicHTTPSessionManager`` documentation for limitations.
 
 ## Stateless Mode
 

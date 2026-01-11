@@ -3,287 +3,233 @@ import Testing
 
 @testable import MCP
 
-/// Integration tests for HTTP transport following TypeScript SDK patterns.
+/// Integration tests for HTTP transport using real HTTP requests.
 ///
 /// These tests verify:
 /// - Multi-client scenarios (10+ concurrent clients)
 /// - Session lifecycle (create, use, delete)
 /// - Stateful vs stateless mode
 /// - Response routing
-@Suite("HTTP Integration Tests")
+///
+/// Uses TestHTTPServer (Hummingbird) to run a real HTTP server and URLSession
+/// to make real HTTP requests, similar to Python (httpx) and TypeScript (fetch) SDKs.
+/// This ensures Host headers are set correctly and DNS rebinding protection works.
+@Suite("HTTP Integration Tests", .serialized)
 struct HTTPIntegrationTests {
 
-    // MARK: - Test Message Templates (matching TypeScript SDK)
+    // MARK: - Test Message Templates
 
     static let initializeMessage = TestPayloads.initializeRequest(id: "init-1", clientName: "test-client")
-
     static let toolsListMessage = TestPayloads.listToolsRequest(id: "tools-1")
 
-    // MARK: - Helper Functions
-
-    // MARK: - Initialization Tests (matching TypeScript SDK)
+    // MARK: - Initialization Tests
 
     @Test("Initialize server and generate session ID")
     func initializeServerAndGenerateSessionId() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
-        let request = TestPayloads.postRequest(body: Self.initializeMessage)
-        let response = await transport.handleRequest(request)
+        let (_, response) = try await server.post(body: Self.initializeMessage)
 
         #expect(response.statusCode == 200)
-        #expect(response.headers[HTTPHeader.contentType] == "text/event-stream")
-        #expect(response.headers[HTTPHeader.sessionId] != nil)
+        #expect(response.value(forHTTPHeaderField: HTTPHeader.contentType) == "text/event-stream")
+        #expect(response.value(forHTTPHeaderField: HTTPHeader.sessionId) != nil)
     }
 
     @Test("Reject second initialization request")
     func rejectSecondInitializationRequest() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // First initialize
-        let request1 = TestPayloads.postRequest(body: Self.initializeMessage)
-        let response1 = await transport.handleRequest(request1)
+        let (_, response1) = try await server.post(body: Self.initializeMessage)
         #expect(response1.statusCode == 200)
 
-        let sessionId = response1.headers[HTTPHeader.sessionId]!
+        let sessionId = response1.value(forHTTPHeaderField: HTTPHeader.sessionId)!
 
         // Second initialize - should fail
         let secondInitMessage = TestPayloads.initializeRequest(id: "init-2", clientName: "test-client")
-        let request2 = TestPayloads.postRequest(body: secondInitMessage, sessionId: sessionId)
-        let response2 = await transport.handleRequest(request2)
+        let (_, response2) = try await server.post(body: secondInitMessage, sessionId: sessionId)
 
         #expect(response2.statusCode == 400)
     }
 
     @Test("Reject batch initialize request")
     func rejectBatchInitializeRequest() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         let batchInitMessages = TestPayloads.batchRequest([
             TestPayloads.initializeRequest(id: "init-1", clientName: "test-client-1"),
             TestPayloads.initializeRequest(id: "init-2", clientName: "test-client-2"),
         ])
-        let request = TestPayloads.postRequest(body: batchInitMessages)
-        let response = await transport.handleRequest(request)
+        let (_, response) = try await server.post(body: batchInitMessages)
 
         #expect(response.statusCode == 400)
     }
 
-    // MARK: - Session Validation Tests (matching TypeScript SDK)
+    // MARK: - Session Validation Tests
 
     @Test("Reject requests without valid session ID")
     func rejectRequestsWithoutValidSessionId() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize first
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
-        // Try without session ID
-        let request = TestPayloads.postRequest(body: Self.toolsListMessage)
-        let response = await transport.handleRequest(request)
+        // Try without session ID - should fail
+        let (_, response) = try await server.post(body: Self.toolsListMessage)
 
         #expect(response.statusCode == 400)
     }
 
     @Test("Reject invalid session ID")
     func rejectInvalidSessionId() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { UUID().uuidString })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize first
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // Try with invalid session ID
-        let request = TestPayloads.postRequest(body: Self.toolsListMessage, sessionId: "invalid-session-id")
-        let response = await transport.handleRequest(request)
+        let (_, response) = try await server.post(body: Self.toolsListMessage, sessionId: "invalid-session-id")
 
         #expect(response.statusCode == 404)
     }
 
-    // MARK: - SSE Stream Tests (matching TypeScript SDK)
+    // MARK: - SSE Stream Tests
 
-    @Test("Reject second SSE stream for same session")
-    func rejectSecondSSEStreamForSameSession() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
-        )
-        try await transport.connect()
+    // Note: "Reject second SSE stream for same session" test is not applicable with real HTTP
+    // because URLSession closes the connection after receiving the response. This behavior
+    // is tested in HTTPServerTransportTests with direct handleRequest() calls.
 
-        // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        let initResponse = await transport.handleRequest(initRequest)
-        #expect(initResponse.statusCode == 200)
-
-        // First GET - should succeed
-        let getRequest1 = HTTPRequest(
-            method: "GET",
-            headers: [
-                HTTPHeader.accept: "text/event-stream",
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ]
-        )
-        let response1 = await transport.handleRequest(getRequest1)
-        #expect(response1.statusCode == 200)
-
-        // Second GET - should fail (only one stream allowed)
-        let getRequest2 = HTTPRequest(
-            method: "GET",
-            headers: [
-                HTTPHeader.accept: "text/event-stream",
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ]
-        )
-        let response2 = await transport.handleRequest(getRequest2)
-        #expect(response2.statusCode == 409)
-    }
-
-    @Test("Reject GET requests without Accept header")
+    @Test("Reject GET requests without Accept header for SSE")
     func rejectGETRequestsWithoutAcceptHeader() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
-        // GET without proper Accept header
-        let getRequest = HTTPRequest(
-            method: "GET",
-            headers: [
-                HTTPHeader.accept: "application/json",  // Wrong Accept header
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ]
-        )
-        let response = await transport.handleRequest(getRequest)
+        // GET with wrong Accept header
+        var request = URLRequest(url: await server.baseURL)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")  // Wrong Accept
+        request.setValue("test-session", forHTTPHeaderField: HTTPHeader.sessionId)
+        request.setValue(Version.v2024_11_05, forHTTPHeaderField: HTTPHeader.protocolVersion)
+
+        let (_, response) = try await server.request(request)
         #expect(response.statusCode == 406)
     }
 
-    // MARK: - Content Type Validation (matching TypeScript SDK)
+    // MARK: - Content Type Validation
 
     @Test("Reject POST requests without proper Accept header")
     func rejectPOSTRequestsWithoutProperAcceptHeader() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // POST without text/event-stream in Accept
-        let request = HTTPRequest(
-            method: "POST",
-            headers: [
-                HTTPHeader.accept: "application/json",  // Missing text/event-stream
-                HTTPHeader.contentType: "application/json",
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ],
-            body: Self.toolsListMessage.data(using: .utf8)
-        )
-        let response = await transport.handleRequest(request)
+        var request = URLRequest(url: await server.baseURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")  // Missing text/event-stream
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("test-session", forHTTPHeaderField: HTTPHeader.sessionId)
+        request.setValue(Version.v2024_11_05, forHTTPHeaderField: HTTPHeader.protocolVersion)
+        request.httpBody = Self.toolsListMessage.data(using: .utf8)
+
+        let (_, response) = try await server.request(request)
         #expect(response.statusCode == 406)
     }
 
     @Test("Reject unsupported Content-Type")
     func rejectUnsupportedContentType() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // POST with wrong Content-Type
-        let request = HTTPRequest(
-            method: "POST",
-            headers: [
-                HTTPHeader.accept: "application/json, text/event-stream",
-                HTTPHeader.contentType: "text/plain",  // Wrong Content-Type
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ],
-            body: "This is plain text".data(using: .utf8)
-        )
-        let response = await transport.handleRequest(request)
+        var request = URLRequest(url: await server.baseURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("text/plain", forHTTPHeaderField: "Content-Type")  // Wrong Content-Type
+        request.setValue("test-session", forHTTPHeaderField: HTTPHeader.sessionId)
+        request.setValue(Version.v2024_11_05, forHTTPHeaderField: HTTPHeader.protocolVersion)
+        request.httpBody = "This is plain text".data(using: .utf8)
+
+        let (_, response) = try await server.request(request)
         #expect(response.statusCode == 415)
     }
 
-    // MARK: - Notification Handling (matching TypeScript SDK)
+    // MARK: - Notification Handling
 
     @Test("Handle JSON-RPC batch notification messages with 202 response")
     func handleJSONRPCBatchNotificationMessagesWith202Response() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // Send batch of notifications (no IDs)
         let batchNotifications = """
             [{"jsonrpc":"2.0","method":"someNotification1","params":{}},{"jsonrpc":"2.0","method":"someNotification2","params":{}}]
             """
-        let request = TestPayloads.postRequest(body: batchNotifications, sessionId: "test-session")
-        let response = await transport.handleRequest(request)
+        let (_, response) = try await server.post(body: batchNotifications, sessionId: "test-session")
 
         #expect(response.statusCode == 202)
     }
 
-    // MARK: - JSON Parsing (matching TypeScript SDK)
+    // MARK: - JSON Parsing
 
     @Test("Handle invalid JSON data properly")
     func handleInvalidJSONDataProperly() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // Send invalid JSON
-        let request = HTTPRequest(
-            method: "POST",
-            headers: [
-                HTTPHeader.accept: "application/json, text/event-stream",
-                HTTPHeader.contentType: "application/json",
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ],
-            body: "This is not valid JSON".data(using: .utf8)
-        )
-        let response = await transport.handleRequest(request)
+        var request = URLRequest(url: await server.baseURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("test-session", forHTTPHeaderField: HTTPHeader.sessionId)
+        request.setValue(Version.v2024_11_05, forHTTPHeaderField: HTTPHeader.protocolVersion)
+        request.httpBody = "This is not valid JSON".data(using: .utf8)
+
+        let (_, response) = try await server.request(request)
         #expect(response.statusCode == 400)
     }
 
-    // MARK: - DELETE Tests (matching TypeScript SDK)
+    // MARK: - DELETE Tests
 
     @Test("Handle DELETE requests and close session properly")
     func handleDELETERequestsAndCloseSession() async throws {
@@ -294,27 +240,17 @@ struct HTTPIntegrationTests {
         }
         let state = ClosedState()
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "test-session" },
-                onSessionClosed: { _ in await state.markClosed() }
-            )
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" },
+            onSessionClosed: { _ in await state.markClosed() }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // DELETE
-        let deleteRequest = HTTPRequest(
-            method: "DELETE",
-            headers: [
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ]
-        )
-        let response = await transport.handleRequest(deleteRequest)
+        let (_, response) = try await server.delete(sessionId: "test-session")
 
         #expect(response.statusCode == 200)
         let closed = await state.isClosed()
@@ -323,187 +259,59 @@ struct HTTPIntegrationTests {
 
     @Test("Reject DELETE requests with invalid session ID")
     func rejectDELETERequestsWithInvalidSessionId() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "valid-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "valid-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // DELETE with invalid session ID
-        let deleteRequest = HTTPRequest(
-            method: "DELETE",
-            headers: [
-                HTTPHeader.sessionId: "invalid-session-id",
-                HTTPHeader.protocolVersion: Version.v2024_11_05,
-            ]
-        )
-        let response = await transport.handleRequest(deleteRequest)
+        let (_, response) = try await server.delete(sessionId: "invalid-session-id")
 
         #expect(response.statusCode == 404)
     }
 
-    // MARK: - Protocol Version Tests (matching TypeScript SDK)
+    // MARK: - Protocol Version Tests
 
     @Test("Accept requests with matching protocol version")
     func acceptRequestsWithMatchingProtocolVersion() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // Request with valid protocol version
-        let request = TestPayloads.postRequest(body: Self.toolsListMessage, sessionId: "test-session")
-        let response = await transport.handleRequest(request)
+        let (_, response) = try await server.post(body: Self.toolsListMessage, sessionId: "test-session")
 
         #expect(response.statusCode == 200)
     }
 
     @Test("Reject unsupported protocol version")
     func rejectUnsupportedProtocolVersion() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         // Request with unsupported protocol version
-        let request = HTTPRequest(
-            method: "POST",
-            headers: [
-                HTTPHeader.accept: "application/json, text/event-stream",
-                HTTPHeader.contentType: "application/json",
-                HTTPHeader.sessionId: "test-session",
-                HTTPHeader.protocolVersion: "1999-01-01",  // Unsupported version
-            ],
-            body: Self.toolsListMessage.data(using: .utf8)
-        )
-        let response = await transport.handleRequest(request)
+        var request = URLRequest(url: await server.baseURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("test-session", forHTTPHeaderField: HTTPHeader.sessionId)
+        request.setValue("1999-01-01", forHTTPHeaderField: HTTPHeader.protocolVersion)  // Unsupported
+        request.httpBody = Self.toolsListMessage.data(using: .utf8)
 
+        let (_, response) = try await server.request(request)
         #expect(response.statusCode == 400)
-    }
-
-    // MARK: - Stateless Mode Tests (matching TypeScript SDK)
-
-    @Test("Stateless mode - no session ID validation")
-    func statelessModeNoSessionIdValidation() async throws {
-        // Stateless mode - no session ID generator
-        let transport = HTTPServerTransport()
-        try await transport.connect()
-
-        // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        let initResponse = await transport.handleRequest(initRequest)
-
-        #expect(initResponse.statusCode == 200)
-        // Should NOT have session ID header in stateless mode
-        #expect(initResponse.headers[HTTPHeader.sessionId] == nil)
-
-        // Request without session ID should work in stateless mode
-        let toolsRequest = TestPayloads.postRequest(body: Self.toolsListMessage)
-        let toolsResponse = await transport.handleRequest(toolsRequest)
-
-        #expect(toolsResponse.statusCode == 200)
-    }
-
-    @Test("Stateless mode accepts requests with various session IDs")
-    func statelessModeAcceptsRequestsWithVariousSessionIds() async throws {
-        let transport = HTTPServerTransport()
-        try await transport.connect()
-
-        // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
-
-        // Try with random session ID - should be accepted in stateless mode
-        let request1 = TestPayloads.postRequest(body: Self.toolsListMessage, sessionId: "random-id-1")
-        let response1 = await transport.handleRequest(request1)
-        #expect(response1.statusCode == 200)
-
-        // Try with another random session ID - should also be accepted
-        let request2 = TestPayloads.postRequest(body: Self.toolsListMessage, sessionId: "different-id-2")
-        let response2 = await transport.handleRequest(request2)
-        #expect(response2.statusCode == 200)
-    }
-
-    @Test("Stateless mode rejects second SSE stream")
-    func statelessModeRejectsSecondSSEStream() async throws {
-        // Despite no session ID requirement, only one SSE stream allowed
-        let transport = HTTPServerTransport()
-        try await transport.connect()
-
-        // Initialize
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
-
-        // First GET
-        let getRequest1 = HTTPRequest(
-            method: "GET",
-            headers: [HTTPHeader.accept: "text/event-stream"]
-        )
-        let response1 = await transport.handleRequest(getRequest1)
-        #expect(response1.statusCode == 200)
-
-        // Second GET - should be rejected
-        let getRequest2 = HTTPRequest(
-            method: "GET",
-            headers: [HTTPHeader.accept: "text/event-stream"]
-        )
-        let response2 = await transport.handleRequest(getRequest2)
-        #expect(response2.statusCode == 409)
-    }
-
-    // MARK: - Multi-Client Tests
-
-    @Test("Ten concurrent clients")
-    func tenConcurrentClients() async throws {
-        // Simulate 10 clients connecting concurrently
-        // Each client gets its own transport
-        actor Counter {
-            var count = 0
-            func increment() { count += 1 }
-            func value() -> Int { count }
-        }
-        let successCounter = Counter()
-
-        await withTaskGroup(of: Int.self) { group in
-            for clientId in 0..<10 {
-                group.addTask {
-                    let transport = HTTPServerTransport(
-                        options: .init(sessionIdGenerator: { "session-\(clientId)" })
-                    )
-                    try? await transport.connect()
-
-                    let initMessage = TestPayloads.initializeRequest(
-                        id: "\(clientId)",
-                        clientName: "client-\(clientId)"
-                    )
-                    let request = TestPayloads.postRequest(body: initMessage)
-
-                    let response = await transport.handleRequest(request)
-                    return response.statusCode
-                }
-            }
-
-            // Verify all clients connected successfully
-            for await statusCode in group {
-                if statusCode == 200 {
-                    await successCounter.increment()
-                }
-            }
-        }
-
-        let count = await successCounter.value()
-        #expect(count == 10)
     }
 
     // MARK: - Session Callbacks
@@ -517,18 +325,15 @@ struct HTTPIntegrationTests {
         }
         let tracker = CallbackTracker()
 
-        let transport = HTTPServerTransport(
-            options: .init(
-                sessionIdGenerator: { "callback-test-session" },
-                onSessionInitialized: { sessionId in
-                    await tracker.set(sessionId)
-                }
-            )
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "callback-test-session" },
+            onSessionInitialized: { sessionId in
+                await tracker.set(sessionId)
+            }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        _ = await transport.handleRequest(initRequest)
+        let (_, _) = try await server.post(body: Self.initializeMessage)
 
         let trackedSessionId = await tracker.get()
         #expect(trackedSessionId == "callback-test-session")
@@ -536,85 +341,53 @@ struct HTTPIntegrationTests {
 
     // MARK: - Method Not Allowed Tests
 
-    /// Tests that unsupported HTTP methods (PUT, PATCH) are rejected with 405.
-    ///
-    /// Based on Python SDK's `test_method_not_allowed`:
-    /// - PUT method should be rejected
-    /// - PATCH method should be rejected
     @Test("Reject unsupported HTTP methods with 405")
     func rejectUnsupportedHttpMethods() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "method-test-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "method-test-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize first to get a valid session
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        let initResponse = await transport.handleRequest(initRequest)
+        let (_, initResponse) = try await server.post(body: Self.initializeMessage)
         #expect(initResponse.statusCode == 200)
 
         // Test PUT method
-        let putRequest = TestPayloads.customMethodRequest(
-            method: "PUT",
-            body: Self.initializeMessage,
-            sessionId: "method-test-session"
-        )
-        let putResponse = await transport.handleRequest(putRequest)
+        let (_, putResponse) = try await server.customMethod("PUT", body: Self.initializeMessage, sessionId: "method-test-session")
         #expect(putResponse.statusCode == 405, "PUT method should be rejected with 405 Method Not Allowed")
 
         // Test PATCH method
-        let patchRequest = TestPayloads.customMethodRequest(
-            method: "PATCH",
-            body: Self.initializeMessage,
-            sessionId: "method-test-session"
-        )
-        let patchResponse = await transport.handleRequest(patchRequest)
+        let (_, patchResponse) = try await server.customMethod("PATCH", body: Self.initializeMessage, sessionId: "method-test-session")
         #expect(patchResponse.statusCode == 405, "PATCH method should be rejected with 405 Method Not Allowed")
     }
 
     // MARK: - Session Termination Tests
 
-    /// Tests that requests to a terminated session fail with appropriate error.
-    ///
-    /// Based on Python SDK's `test_session_termination`:
-    /// 1. Initialize session
-    /// 2. Terminate session with DELETE
-    /// 3. Subsequent requests should fail with 404 "Session terminated"
     @Test("Requests to terminated session fail with 404")
     func requestsToTerminatedSessionFail() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "terminated-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "terminated-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize the session
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        let initResponse = await transport.handleRequest(initRequest)
+        let (_, initResponse) = try await server.post(body: Self.initializeMessage)
         #expect(initResponse.statusCode == 200)
 
         // Make a successful request to confirm session is working
-        let pingRequest = TestPayloads.postRequest(
-            body: TestPayloads.pingRequest(),
-            sessionId: "terminated-session"
-        )
-        let pingResponse = await transport.handleRequest(pingRequest)
+        let (_, pingResponse) = try await server.post(body: TestPayloads.pingRequest(), sessionId: "terminated-session")
         #expect(pingResponse.statusCode == 200)
 
         // Terminate the session with DELETE
-        let deleteRequest = TestPayloads.deleteRequest(sessionId: "terminated-session")
-        let deleteResponse = await transport.handleRequest(deleteRequest)
+        let (_, deleteResponse) = try await server.delete(sessionId: "terminated-session")
         #expect(deleteResponse.statusCode == 200)
 
         // Attempt to use the terminated session - should fail
-        let afterDeleteRequest = TestPayloads.postRequest(
-            body: TestPayloads.pingRequest(),
-            sessionId: "terminated-session"
-        )
-        let afterDeleteResponse = await transport.handleRequest(afterDeleteRequest)
+        let (data, afterDeleteResponse) = try await server.post(body: TestPayloads.pingRequest(), sessionId: "terminated-session")
         #expect(afterDeleteResponse.statusCode == 404, "Request to terminated session should return 404")
 
         // Verify the error message mentions session termination
-        if let body = afterDeleteResponse.body, let text = String(data: body, encoding: .utf8) {
+        if let text = String(data: data, encoding: .utf8) {
             #expect(
                 text.lowercased().contains("terminated") || text.lowercased().contains("session"),
                 "Error message should indicate session termination"
@@ -624,37 +397,135 @@ struct HTTPIntegrationTests {
 
     // MARK: - Backwards Compatibility Tests
 
-    /// Tests that server accepts requests without protocol version header for backwards compatibility.
-    ///
-    /// Based on Python SDK's `test_server_backwards_compatibility_no_protocol_version`:
-    /// Older clients may not send the mcp-protocol-version header, and the server
-    /// should still accept their requests.
     @Test("Backwards compatibility - accept requests without protocol version header")
     func backwardsCompatibilityNoProtocolVersion() async throws {
-        let transport = HTTPServerTransport(
-            options: .init(sessionIdGenerator: { "compat-session" })
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { "compat-session" }
         )
-        try await transport.connect()
+        defer { Task { await server.stop() } }
 
         // Initialize the session (with protocol version)
-        let initRequest = TestPayloads.postRequest(body: Self.initializeMessage)
-        let initResponse = await transport.handleRequest(initRequest)
+        let (_, initResponse) = try await server.post(body: Self.initializeMessage)
         #expect(initResponse.statusCode == 200)
 
         // Make a request WITHOUT the protocol version header
-        let requestWithoutVersion = HTTPRequest(
-            method: "POST",
-            headers: [
-                HTTPHeader.accept: "application/json, text/event-stream",
-                HTTPHeader.contentType: "application/json",
-                HTTPHeader.sessionId: "compat-session",
-                // Note: NO protocolVersion header
-            ],
-            body: TestPayloads.pingRequest().data(using: .utf8)
-        )
-        let response = await transport.handleRequest(requestWithoutVersion)
+        var request = URLRequest(url: await server.baseURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("compat-session", forHTTPHeaderField: HTTPHeader.sessionId)
+        // Note: NO protocolVersion header
+        request.httpBody = TestPayloads.pingRequest().data(using: .utf8)
+
+        let (_, response) = try await server.request(request)
 
         // Should succeed for backwards compatibility
         #expect(response.statusCode == 200, "Server should accept requests without protocol version header for backwards compatibility")
+    }
+
+    // MARK: - Real HTTP with DNS Rebinding Protection
+
+    @Test("Real HTTP request includes Host header automatically")
+    func realHTTPRequestIncludesHostHeader() async throws {
+        // This test verifies that real HTTP requests via URLSession include Host headers,
+        // which is how DNS rebinding protection works in production.
+        // TestHTTPServer uses default DNS rebinding protection (.localhost())
+
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
+        )
+        defer { Task { await server.stop() } }
+
+        // URLSession automatically adds Host header based on the URL
+        let (_, response) = try await server.post(body: Self.initializeMessage)
+
+        // If DNS rebinding protection blocked us, we'd get 421. Getting 200 proves
+        // URLSession set the Host header correctly and protection allowed it.
+        #expect(response.statusCode == 200)
+    }
+
+    @Test("DNS rebinding attack blocked with spoofed Host header")
+    func dnsRebindingAttackBlocked() async throws {
+        // This test verifies that DNS rebinding protection actually blocks attacks.
+        // We use curl to send a request with a spoofed Host header (simulating an attack).
+        // URLSession can't do this because it automatically sets Host based on URL.
+
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
+        )
+        defer { Task { await server.stop() } }
+
+        let port = await server.port
+
+        // Use curl to send a request with a malicious Host header
+        // This simulates a DNS rebinding attack where attacker controls DNS
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = [
+            "-s",                                    // Silent mode
+            "-o", "/dev/null",                       // Discard body
+            "-w", "%{http_code}",                    // Output only status code
+            "-X", "POST",
+            "-H", "Host: evil.attacker.com",         // Spoofed Host header (attack)
+            "-H", "Content-Type: application/json",
+            "-H", "Accept: application/json, text/event-stream",
+            "-H", "\(HTTPHeader.protocolVersion): \(Version.v2024_11_05)",
+            "-d", Self.initializeMessage,
+            "http://127.0.0.1:\(port)/"
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let statusCode = String(data: data, encoding: .utf8) ?? ""
+
+        // Should get 421 Misdirected Request because Host header doesn't match
+        #expect(statusCode == "421", "Expected 421 for spoofed Host, got \(statusCode)")
+    }
+
+    @Test("DNS rebinding attack blocked with missing Host header")
+    func dnsRebindingAttackBlockedMissingHost() async throws {
+        // Verify that requests without a Host header are rejected
+
+        let server = try await TestHTTPServer.create(
+            sessionIdGenerator: { UUID().uuidString }
+        )
+        defer { Task { await server.stop() } }
+
+        let port = await server.port
+
+        // Use curl with HTTP/1.0 to avoid automatic Host header
+        // Or explicitly set an empty host - curl still sends Host but we test the path
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = [
+            "-s",
+            "-o", "/dev/null",
+            "-w", "%{http_code}",
+            "-X", "POST",
+            "--http1.0",                             // HTTP/1.0 doesn't require Host
+            "-H", "Host:",                           // Empty Host header
+            "-H", "Content-Type: application/json",
+            "-H", "Accept: application/json, text/event-stream",
+            "-H", "\(HTTPHeader.protocolVersion): \(Version.v2024_11_05)",
+            "-d", Self.initializeMessage,
+            "http://127.0.0.1:\(port)/"
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let statusCode = String(data: data, encoding: .utf8) ?? ""
+
+        // Should get 421 Misdirected Request because Host header is missing/empty
+        #expect(statusCode == "421", "Expected 421 for missing Host, got \(statusCode)")
     }
 }

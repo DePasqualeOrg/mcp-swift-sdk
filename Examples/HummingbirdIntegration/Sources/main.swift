@@ -1,14 +1,15 @@
 /// Hummingbird MCP Server Example
 ///
 /// This example demonstrates how to integrate an MCP server with the Hummingbird web framework.
-/// It follows the TypeScript SDK's pattern from `examples/server/src/simpleStreamableHttp.ts`.
+/// It uses the high-level `MCPServer` API for tool registration and creates per-session
+/// Server instances using `createSession()`.
 ///
 /// ## Architecture
 ///
-/// - ONE `Server` instance is shared across all HTTP clients
-/// - Each client session gets its own `HTTPServerTransport`
-/// - The `SessionManager` actor manages transport instances by session ID
-/// - Request capture in the Server ensures responses route to the correct client
+/// - ONE `MCPServer` instance holds shared tool/resource/prompt definitions
+/// - Each client session gets its own `Server` instance via `createSession()`
+/// - Each session has its own `HTTPServerTransport`
+/// - The `SessionManager` actor manages session lifecycle
 ///
 /// ## Endpoints
 ///
@@ -37,68 +38,93 @@ import MCP
 let serverHost = "localhost"
 let serverPort = 3000
 
+// MARK: - Tool Definitions
+
+/// Echoes back the input message.
+@Tool
+struct Echo {
+    static let name = "echo"
+    static let description = "Echoes back the input message"
+
+    @Parameter(description: "The message to echo")
+    var message: String
+
+    func perform(context: HandlerContext) async throws -> String {
+        message
+    }
+}
+
+/// Adds two numbers.
+@Tool
+struct Add {
+    static let name = "add"
+    static let description = "Adds two numbers"
+
+    @Parameter(description: "First number")
+    var a: Double
+
+    @Parameter(description: "Second number")
+    var b: Double
+
+    func perform(context: HandlerContext) async throws -> String {
+        "Result: \(a + b)"
+    }
+}
+
 // MARK: - Server Setup
 
-/// Create the MCP server (ONE instance for all clients)
-let mcpServer = MCP.Server(
+/// Create the MCP server using the high-level API (ONE instance for all clients).
+/// Tools/resources/prompts are registered once and shared across all sessions.
+let mcpServer = MCPServer(
     name: "hummingbird-mcp-example",
-    version: "1.0.0",
-    capabilities: .init(tools: .init())
+    version: "1.0.0"
 )
 
-/// Register tool handlers
-func setUpToolHandlers() async {
-    // Register tool list handler
-    await mcpServer.withRequestHandler(ListTools.self) { _, _ in
-        ListTools.Result(tools: [
-            Tool(
-                name: "echo",
-                description: "Echoes back the input message",
-                inputSchema: [
-                    "type": "object",
-                    "properties": [
-                        "message": ["type": "string", "description": "The message to echo"]
-                    ],
-                    "required": ["message"]
-                ]
-            ),
-            Tool(
-                name: "add",
-                description: "Adds two numbers",
-                inputSchema: [
-                    "type": "object",
-                    "properties": [
-                        "a": ["type": "number", "description": "First number"],
-                        "b": ["type": "number", "description": "Second number"]
-                    ],
-                    "required": ["a", "b"]
-                ]
-            ),
-        ])
-    }
-
-    // Register tool call handler
-    await mcpServer.withRequestHandler(CallTool.self) { request, _ in
-        switch request.name {
-        case "echo":
-            let message = request.arguments?["message"]?.stringValue ?? "No message provided"
-            return CallTool.Result(content: [.text(message)])
-
-        case "add":
-            let a = request.arguments?["a"]?.doubleValue ?? 0
-            let b = request.arguments?["b"]?.doubleValue ?? 0
-            return CallTool.Result(content: [.text("Result: \(a + b)")])
-
-        default:
-            return CallTool.Result(content: [.text("Unknown tool: \(request.name)")], isError: true)
-        }
+/// Register tools using the high-level API
+func setUpTools() async throws {
+    try await mcpServer.register {
+        Echo.self
+        Add.self
     }
 }
 
 // MARK: - Session Management
 
+/// Custom session manager for this example.
+/// Each session has its own Server instance (created via mcpServer.createSession())
+/// and its own HTTPServerTransport.
+actor ExampleSessionManager {
+    struct Session {
+        let server: MCP.Server
+        let transport: HTTPServerTransport
+    }
+
+    private var sessions: [String: Session] = [:]
+    private let maxSessions: Int
+
+    init(maxSessions: Int) {
+        self.maxSessions = maxSessions
+    }
+
+    func session(forId id: String) -> Session? {
+        sessions[id]
+    }
+
+    func canAddSession() -> Bool {
+        sessions.count < maxSessions
+    }
+
+    func store(_ session: Session, forId id: String) {
+        sessions[id] = session
+    }
+
+    func remove(_ id: String) {
+        sessions.removeValue(forKey: id)
+    }
+}
+
 /// Session manager for tracking active sessions
-let sessionManager = SessionManager(maxSessions: 100)
+let sessionManager = ExampleSessionManager(maxSessions: 100)
 
 /// Logger for the example
 let logger = Logger(label: "mcp.example.hummingbird")
@@ -127,12 +153,12 @@ func handlePost(request: Request, context: MCPRequestContext) async throws -> Re
     // Check if this is an initialize request
     let isInitializeRequest = String(data: data, encoding: .utf8)?.contains("\"method\":\"initialize\"") ?? false
 
-    // Get or create transport
+    // Get or create session
     let transport: HTTPServerTransport
 
-    if let sid = sessionId, let existing = await sessionManager.transport(forSessionId: sid) {
+    if let sid = sessionId, let session = await sessionManager.session(forId: sid) {
         // Reuse existing transport for this session
-        transport = existing
+        transport = session.transport
     } else if isInitializeRequest {
         // Check capacity
         guard await sessionManager.canAddSession() else {
@@ -143,7 +169,7 @@ func handlePost(request: Request, context: MCPRequestContext) async throws -> Re
             )
         }
 
-        // Generate session ID upfront so we can store the transport
+        // Generate session ID upfront
         let newSessionId = UUID().uuidString
 
         // Create new transport with session callbacks
@@ -163,12 +189,18 @@ func handlePost(request: Request, context: MCPRequestContext) async throws -> Re
             )
         )
 
-        // Store the transport immediately (we know the session ID)
-        await sessionManager.store(newTransport, forSessionId: newSessionId)
+        // Create a new Server instance wired to the shared registries
+        let server = await mcpServer.createSession()
+
+        // Store the session
+        await sessionManager.store(
+            ExampleSessionManager.Session(server: server, transport: newTransport),
+            forId: newSessionId
+        )
         transport = newTransport
 
-        // Connect transport to server
-        try await mcpServer.start(transport: transport)
+        // Start the server with the transport
+        try await server.start(transport: transport)
     } else if sessionId != nil {
         // Client sent a session ID that no longer exists
         return Response(
@@ -200,7 +232,7 @@ func handlePost(request: Request, context: MCPRequestContext) async throws -> Re
 /// Handle GET /mcp requests (SSE stream for server-initiated notifications)
 func handleGet(request: Request, context: MCPRequestContext) async throws -> Response {
     guard let sessionId = request.headers[HTTPField.Name(HTTPHeader.sessionId)!],
-        let transport = await sessionManager.transport(forSessionId: sessionId)
+        let session = await sessionManager.session(forId: sessionId)
     else {
         return Response(
             status: .badRequest,
@@ -213,7 +245,7 @@ func handleGet(request: Request, context: MCPRequestContext) async throws -> Res
         headers: extractHeaders(from: request)
     )
 
-    let mcpResponse = await transport.handleRequest(mcpRequest)
+    let mcpResponse = await session.transport.handleRequest(mcpRequest)
 
     return buildResponse(from: mcpResponse)
 }
@@ -221,7 +253,7 @@ func handleGet(request: Request, context: MCPRequestContext) async throws -> Res
 /// Handle DELETE /mcp requests (session termination)
 func handleDelete(request: Request, context: MCPRequestContext) async throws -> Response {
     guard let sessionId = request.headers[HTTPField.Name(HTTPHeader.sessionId)!],
-        let transport = await sessionManager.transport(forSessionId: sessionId)
+        let session = await sessionManager.session(forId: sessionId)
     else {
         return Response(
             status: .notFound,
@@ -234,7 +266,7 @@ func handleDelete(request: Request, context: MCPRequestContext) async throws -> 
         headers: extractHeaders(from: request)
     )
 
-    let mcpResponse = await transport.handleRequest(mcpRequest)
+    let mcpResponse = await session.transport.handleRequest(mcpRequest)
 
     return Response(status: .init(code: mcpResponse.statusCode))
 }
@@ -247,6 +279,14 @@ func extractHeaders(from request: Request) -> [String: String] {
     for field in request.headers {
         headers[field.name.rawName] = field.value
     }
+
+    // HTTPTypes stores Host header separately in the authority property
+    // (HTTP/2 uses :authority pseudo-header instead of Host)
+    // This is required for DNS rebinding protection to work
+    if let authority = request.head.authority {
+        headers["Host"] = authority
+    }
+
     return headers
 }
 
@@ -312,8 +352,8 @@ struct SSEResponseSequence: AsyncSequence, Sendable {
 @main
 struct HummingbirdMCPExample {
     static func main() async throws {
-        // Set up tool handlers
-        await setUpToolHandlers()
+        // Register tools using high-level API
+        try await setUpTools()
 
         // Create router
         let router = Router(context: MCPRequestContext.self)

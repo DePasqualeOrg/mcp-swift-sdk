@@ -114,15 +114,24 @@ public struct HTTPServerTransportOptions: Sendable {
     /// client reconnection timing for polling behavior.
     public var retryInterval: Int?
 
-    /// Security settings for DNS rebinding protection.
+    /// DNS rebinding protection settings.
     ///
-    /// When nil, no security validation is performed.
-    /// Use `TransportSecuritySettings.forLocalhost(port:)` for localhost-bound servers.
+    /// Defaults to `.localhost()` which protects MCP servers running on user machines
+    /// from browser-based DNS rebinding attacks.
     ///
-    /// See `TransportSecuritySettings` documentation for details on DNS rebinding attacks
-    /// and the rationale for protection.
-    public var security: TransportSecuritySettings?
+    /// For cloud deployments (Docker, Kubernetes, etc.), use `.none` since DNS rebinding
+    /// is not a threat in those environments.
+    ///
+    /// See ``DNSRebindingProtection`` for detailed documentation on when to use each setting.
+    public var dnsRebindingProtection: DNSRebindingProtection
 
+    /// Creates transport options.
+    ///
+    /// DNS rebinding protection defaults to `.localhost()`, appropriate for MCP servers
+    /// running on user machines. For cloud deployments, set `dnsRebindingProtection: .none`.
+    ///
+    /// - Note: For explicit bind address configuration, use ``forBindAddress(host:port:sessionIdGenerator:onSessionInitialized:onSessionClosed:enableJsonResponse:eventStore:retryInterval:dnsRebindingProtection:)``
+    ///   which auto-configures protection based on the address.
     public init(
         sessionIdGenerator: (@Sendable () -> String)? = nil,
         onSessionInitialized: (@Sendable (String) async -> Void)? = nil,
@@ -130,7 +139,7 @@ public struct HTTPServerTransportOptions: Sendable {
         enableJsonResponse: Bool = false,
         eventStore: EventStore? = nil,
         retryInterval: Int? = nil,
-        security: TransportSecuritySettings? = nil
+        dnsRebindingProtection: DNSRebindingProtection = .localhost()
     ) {
         self.sessionIdGenerator = sessionIdGenerator
         self.onSessionInitialized = onSessionInitialized
@@ -138,34 +147,39 @@ public struct HTTPServerTransportOptions: Sendable {
         self.enableJsonResponse = enableJsonResponse
         self.eventStore = eventStore
         self.retryInterval = retryInterval
-        self.security = security
+        self.dnsRebindingProtection = dnsRebindingProtection
     }
 
-    /// Creates options with automatic security configuration based on bind address.
+    /// Creates options with DNS rebinding protection configured for the bind address.
     ///
-    /// This factory method follows the same convention as the TypeScript and Python SDKs:
-    /// - For localhost addresses (`127.0.0.1`, `localhost`, `::1`), DNS rebinding protection
-    ///   is automatically enabled with appropriate allowed hosts/origins.
-    /// - For other addresses (e.g., `0.0.0.0`), no automatic security is configured.
+    /// This factory method auto-configures protection based on where the server binds:
+    /// - **Localhost** (`127.0.0.1`, `localhost`, `::1`): Enables DNS rebinding protection
+    /// - **Other addresses** (e.g., `0.0.0.0`): No protection (cloud deployment assumed)
     ///
-    /// ## Example
+    /// ## Examples
     ///
     /// ```swift
-    /// // Auto-configures DNS rebinding protection for localhost
+    /// // Local development - auto-enables DNS rebinding protection
     /// let options = HTTPServerTransportOptions.forBindAddress(
-    ///     host: "127.0.0.1",
+    ///     host: "localhost",
     ///     port: 8080,
     ///     sessionIdGenerator: { UUID().uuidString }
     /// )
     ///
-    /// // No automatic protection for 0.0.0.0 - configure manually if needed
+    /// // Cloud deployment - no protection needed
     /// let options = HTTPServerTransportOptions.forBindAddress(
     ///     host: "0.0.0.0",
     ///     port: 8080,
-    ///     security: TransportSecuritySettings(
-    ///         enableDnsRebindingProtection: true,
-    ///         allowedHosts: ["myserver.local:8080"],
-    ///         allowedOrigins: ["http://myserver.local:8080"]
+    ///     sessionIdGenerator: { UUID().uuidString }
+    /// )
+    ///
+    /// // Override with custom host validation
+    /// let options = HTTPServerTransportOptions.forBindAddress(
+    ///     host: "0.0.0.0",
+    ///     port: 8080,
+    ///     dnsRebindingProtection: .custom(
+    ///         allowedHosts: ["api.example.com:443"],
+    ///         allowedOrigins: ["https://app.example.com"]
     ///     )
     /// )
     /// ```
@@ -179,7 +193,7 @@ public struct HTTPServerTransportOptions: Sendable {
     ///   - enableJsonResponse: If true, return JSON responses instead of SSE streams
     ///   - eventStore: Event store for resumability support
     ///   - retryInterval: Retry interval in milliseconds for SSE
-    ///   - security: Override the auto-configured security settings
+    ///   - dnsRebindingProtection: Override the auto-configured protection settings
     /// - Returns: Configured transport options
     public static func forBindAddress(
         host: String,
@@ -190,10 +204,10 @@ public struct HTTPServerTransportOptions: Sendable {
         enableJsonResponse: Bool = false,
         eventStore: EventStore? = nil,
         retryInterval: Int? = nil,
-        security: TransportSecuritySettings? = nil
+        dnsRebindingProtection: DNSRebindingProtection? = nil
     ) -> HTTPServerTransportOptions {
-        // Auto-configure security for localhost if not explicitly provided
-        let effectiveSecurity = security ?? TransportSecuritySettings.forBindAddress(host: host, port: port)
+        // Auto-configure protection based on bind address if not explicitly provided
+        let effectiveProtection = dnsRebindingProtection ?? DNSRebindingProtection.forBindAddress(host: host, port: port)
 
         return HTTPServerTransportOptions(
             sessionIdGenerator: sessionIdGenerator,
@@ -202,98 +216,164 @@ public struct HTTPServerTransportOptions: Sendable {
             enableJsonResponse: enableJsonResponse,
             eventStore: eventStore,
             retryInterval: retryInterval,
-            security: effectiveSecurity
+            dnsRebindingProtection: effectiveProtection
         )
     }
 }
 
-/// Security settings for DNS rebinding protection.
+/// DNS rebinding protection settings for HTTP server transports.
 ///
-/// DNS rebinding is an attack where a malicious website can bypass same-origin policy
-/// by manipulating DNS responses, potentially allowing browser-based attackers to
-/// interact with local MCP servers. This is particularly dangerous for servers
-/// bound to localhost.
+/// DNS rebinding is an attack where a malicious website can bypass browser same-origin policy
+/// by manipulating DNS responses, potentially allowing browser-based attackers to interact
+/// with local MCP servers. This is particularly dangerous for servers running on a user's
+/// machine (localhost).
+///
+/// ## When to Use Each Setting
+///
+/// ### Local Development / Servers on User Machines
+///
+/// Use `.localhost()` (the default) when the MCP server runs on end-user machines:
+///
+/// ```swift
+/// // Default - protects against DNS rebinding attacks via browsers
+/// let options = HTTPServerTransportOptions()
+///
+/// // Or explicitly with port
+/// let options = HTTPServerTransportOptions(
+///     dnsRebindingProtection: .localhost(port: 8080)
+/// )
+/// ```
+///
+/// ### Cloud / Container Deployments
+///
+/// Use `.none` when deploying to cloud environments (Docker, Kubernetes, etc.):
+///
+/// ```swift
+/// let options = HTTPServerTransportOptions(
+///     dnsRebindingProtection: .none  // No browser-based DNS rebinding threat
+/// )
+/// ```
+///
+/// DNS rebinding is not a threat in cloud deployments because:
+/// - There's no local browser to exploit
+/// - The server is already exposed to the network
+/// - Authentication is the protection layer
+/// - Load balancers/proxies typically handle host validation
+///
+/// ### Custom Host Validation
+///
+/// Use `.custom(allowedHosts:allowedOrigins:)` for specific host requirements:
+///
+/// ```swift
+/// let options = HTTPServerTransportOptions(
+///     dnsRebindingProtection: .custom(
+///         allowedHosts: ["api.example.com:443"],
+///         allowedOrigins: ["https://app.example.com"]
+///     )
+/// )
+/// ```
 ///
 /// ## How Protection Works
 ///
-/// When enabled, the transport validates:
+/// When enabled, the transport validates incoming requests:
 /// 1. **Host header**: Must match an allowed host pattern (prevents DNS rebinding)
 /// 2. **Origin header**: If present (browser requests), must match an allowed origin
 ///
-/// ## Usage
-///
-/// ```swift
-/// // Auto-enabled for localhost (recommended)
-/// let settings = TransportSecuritySettings.forLocalhost(port: 8080)
-///
-/// // Or manually configure
-/// let settings = TransportSecuritySettings(
-///     enableDnsRebindingProtection: true,
-///     allowedHosts: ["myserver.local:8080"],
-///     allowedOrigins: ["http://myserver.local:8080"]
-/// )
-/// ```
-public struct TransportSecuritySettings: Sendable {
-    /// Whether to validate Host and Origin headers for DNS rebinding protection.
-    public var enableDnsRebindingProtection: Bool
+/// Requests failing validation receive a 421 Misdirected Request response.
+public enum DNSRebindingProtection: Sendable, Equatable {
+    /// No DNS rebinding protection.
+    ///
+    /// Use this for cloud deployments (Docker, Kubernetes, cloud platforms) where:
+    /// - There's no local browser to exploit
+    /// - The server is network-exposed by design
+    /// - Authentication handles access control
+    /// - Load balancers/proxies handle host validation
+    case none
 
-    /// Allowed Host header values. Supports wildcard port patterns like "127.0.0.1:*".
-    /// When protection is enabled, requests with Host headers not matching any pattern are rejected.
-    public var allowedHosts: [String]
+    /// Protection configured for localhost-bound servers.
+    ///
+    /// Allows requests from `localhost`, `127.0.0.1`, and `[::1]` with the specified port.
+    /// This is the appropriate setting for MCP servers running on end-user machines.
+    ///
+    /// - Parameter port: The port number. If nil, allows any port (wildcard).
+    case localhost(port: Int? = nil)
 
-    /// Allowed Origin header values. Supports wildcard port patterns like "http://localhost:*".
-    /// When protection is enabled and an Origin header is present, it must match one of these patterns.
-    /// Requests without an Origin header are allowed (non-browser clients).
-    public var allowedOrigins: [String]
+    /// Custom host and origin validation.
+    ///
+    /// Use for specific requirements like validating requests through a known proxy
+    /// or restricting to specific domains.
+    ///
+    /// - Parameters:
+    ///   - allowedHosts: Host header patterns to accept (e.g., "api.example.com:443")
+    ///   - allowedOrigins: Origin header patterns to accept (e.g., "https://app.example.com")
+    case custom(allowedHosts: [String], allowedOrigins: [String])
 
-    public init(
-        enableDnsRebindingProtection: Bool = false,
-        allowedHosts: [String] = [],
-        allowedOrigins: [String] = []
-    ) {
-        self.enableDnsRebindingProtection = enableDnsRebindingProtection
-        self.allowedHosts = allowedHosts
-        self.allowedOrigins = allowedOrigins
+    /// Whether protection is enabled for this setting.
+    public var isEnabled: Bool {
+        switch self {
+        case .none:
+            return false
+        case .localhost, .custom:
+            return true
+        }
     }
 
-    /// Creates security settings for a localhost-bound server.
-    ///
-    /// - Parameter port: The port number (use "*" pattern if port varies)
-    /// - Returns: Security settings with protection enabled for all localhost variants
-    public static func forLocalhost(port: Int? = nil) -> TransportSecuritySettings {
-        let portPattern = port.map { String($0) } ?? "*"
-        return TransportSecuritySettings(
-            enableDnsRebindingProtection: true,
-            allowedHosts: [
+    /// The allowed Host header values for this setting.
+    public var allowedHosts: [String] {
+        switch self {
+        case .none:
+            return []
+        case .localhost(let port):
+            let portPattern = port.map { String($0) } ?? "*"
+            return [
                 "127.0.0.1:\(portPattern)",
                 "localhost:\(portPattern)",
                 "[::1]:\(portPattern)",
-            ],
-            allowedOrigins: [
+            ]
+        case .custom(let hosts, _):
+            return hosts
+        }
+    }
+
+    /// The allowed Origin header values for this setting.
+    public var allowedOrigins: [String] {
+        switch self {
+        case .none:
+            return []
+        case .localhost(let port):
+            let portPattern = port.map { String($0) } ?? "*"
+            return [
                 "http://127.0.0.1:\(portPattern)",
                 "http://localhost:\(portPattern)",
                 "http://[::1]:\(portPattern)",
             ]
-        )
+        case .custom(_, let origins):
+            return origins
+        }
     }
 
-    /// Creates security settings appropriate for the given bind address.
+    /// Creates protection settings appropriate for the given bind address.
     ///
-    /// Auto-enables DNS rebinding protection for localhost addresses,
-    /// returns nil for other addresses (no protection needed for remote bindings).
+    /// - For localhost addresses (`127.0.0.1`, `localhost`, `::1`): Returns `.localhost(port:)`
+    /// - For other addresses (e.g., `0.0.0.0`): Returns `.none`
     ///
     /// - Parameters:
     ///   - host: The host address the server is binding to
     ///   - port: The port number
-    /// - Returns: Security settings if protection should be enabled, nil otherwise
-    public static func forBindAddress(host: String, port: Int) -> TransportSecuritySettings? {
+    /// - Returns: Appropriate protection setting for the bind address
+    public static func forBindAddress(host: String, port: Int) -> DNSRebindingProtection {
         let localhostAddresses = ["127.0.0.1", "localhost", "::1"]
         if localhostAddresses.contains(host) {
-            return forLocalhost(port: port)
+            return .localhost(port: port)
         }
-        return nil
+        return .none
     }
 }
+
+// MARK: - Legacy Type Alias
+
+@available(*, deprecated, renamed: "DNSRebindingProtection")
+public typealias TransportSecuritySettings = DNSRebindingProtection
 
 /// Protocol for storing and replaying SSE events for resumability support.
 ///

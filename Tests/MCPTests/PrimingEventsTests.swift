@@ -174,7 +174,8 @@ struct PrimingEventsTests {
             options: .init(
                 sessionIdGenerator: { sessionId },
                 eventStore: eventStore,
-                retryInterval: 5000
+                retryInterval: 5000,
+                dnsRebindingProtection: .none
             )
         )
         try await server.start(transport: transport)
@@ -217,7 +218,8 @@ struct PrimingEventsTests {
         let transport = HTTPServerTransport(
             options: .init(
                 sessionIdGenerator: { sessionId },
-                eventStore: eventStore
+                eventStore: eventStore,
+                dnsRebindingProtection: .none
             )
         )
         try await server.start(transport: transport)
@@ -261,7 +263,8 @@ struct PrimingEventsTests {
             options: .init(
                 sessionIdGenerator: { sessionId },
                 eventStore: eventStore,
-                retryInterval: 5000
+                retryInterval: 5000,
+                dnsRebindingProtection: .none
             )
         )
         try await server.start(transport: transport)
@@ -301,7 +304,8 @@ struct PrimingEventsTests {
         // No event store configured
         let transport = HTTPServerTransport(
             options: .init(
-                sessionIdGenerator: { sessionId }
+                sessionIdGenerator: { sessionId },
+                dnsRebindingProtection: .none
                 // No eventStore
             )
         )
@@ -345,7 +349,8 @@ struct PrimingEventsTests {
             options: .init(
                 sessionIdGenerator: { sessionId },
                 eventStore: eventStore,
-                retryInterval: 1000
+                retryInterval: 1000,
+                dnsRebindingProtection: .none
             )
         )
 
