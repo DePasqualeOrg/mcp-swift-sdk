@@ -205,6 +205,11 @@ extension Client {
     /// - Parameter handler: A closure that receives elicitation parameters and context, returns the result.
     /// - Returns: Self for chaining.
     /// - Precondition: `capabilities.elicitation` must be non-nil.
+    ///
+    /// - Note: Unlike the TypeScript SDK, this method does not wrap the handler with
+    ///   additional validation. Swift's type system enforces that the handler returns
+    ///   a valid `Elicit.Result`, and the server validates the response content against
+    ///   `requestedSchema` when it receives the result.
     @discardableResult
     public func withElicitationHandler(
         _ handler: @escaping @Sendable (Elicit.Parameters, RequestHandlerContext) async throws -> Elicit.Result

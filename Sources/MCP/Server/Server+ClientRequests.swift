@@ -192,15 +192,63 @@ extension Server {
         }
 
         let request: Request<Elicit> = Elicit.request(id: generateRequestId(), params)
-        let result = try await sendRequest(request)
+        var result = try await sendRequest(request)
 
-        // TODO: Add elicitation response validation against the requestedSchema.
-        // TypeScript SDK uses JSON Schema validators (AJV, CfWorker) to validate
-        // elicitation responses against the requestedSchema. Python SDK uses Pydantic.
-        // The ideal solution is to use the same JSON Schema validator for both
-        // elicitation and tool validation, for spec compliance and consistency.
+        // Apply schema defaults and validate elicitation response (form mode only)
+        if case .form(let formParams) = params,
+           result.action == .accept,
+           let content = result.content {
+            // Apply schema defaults to missing fields before validation
+            var contentWithDefaults = content
+            applyElicitationDefaults(from: formParams.requestedSchema, to: &contentWithDefaults)
+            result.content = contentWithDefaults
+
+            // Validate against schema
+            let schemaValue = try Value(formParams.requestedSchema)
+            let contentValue = elicitContentToValue(contentWithDefaults)
+            try validator.validate(contentValue, against: schemaValue)
+        }
 
         return result
+    }
+
+    /// Applies schema defaults to elicitation content for missing fields.
+    ///
+    /// Walks the schema's `properties` and fills in any missing content fields
+    /// that have a `default` value defined in the schema.
+    private func applyElicitationDefaults(
+        from schema: ElicitationSchema,
+        to content: inout [String: ElicitValue]
+    ) {
+        for (key, property) in schema.properties {
+            // Skip if content already has this key
+            guard content[key] == nil else { continue }
+
+            // Apply default if present
+            if let defaultValue = property.default {
+                content[key] = defaultValue
+            }
+        }
+    }
+
+    /// Converts elicitation content to a Value for JSON Schema validation.
+    private func elicitContentToValue(_ content: [String: ElicitValue]) -> Value {
+        var dict: [String: Value] = [:]
+        for (key, elicitValue) in content {
+            switch elicitValue {
+            case .string(let s):
+                dict[key] = .string(s)
+            case .int(let i):
+                dict[key] = .int(i)
+            case .double(let d):
+                dict[key] = .double(d)
+            case .bool(let b):
+                dict[key] = .bool(b)
+            case .strings(let arr):
+                dict[key] = .array(arr.map { .string($0) })
+            }
+        }
+        return .object(dict)
     }
 
     func checkInitialized() throws {

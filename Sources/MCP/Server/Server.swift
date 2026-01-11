@@ -839,6 +839,12 @@ public actor Server {
     /// Used for protocol-level cancellation when CancelledNotification is received.
     var inFlightHandlerTasks: [RequestId: Task<Void, Never>] = [:]
 
+    /// JSON Schema validator for validating tool inputs/outputs and elicitation responses.
+    let validator: any JSONSchemaValidator
+
+    /// Tool cache for schema validation. Populated via `registerTools()`.
+    var toolCache: [String: Tool] = [:]
+
     public init(
         name: String,
         version: String,
@@ -848,7 +854,8 @@ public actor Server {
         websiteUrl: String? = nil,
         instructions: String? = nil,
         capabilities: Server.Capabilities = .init(),
-        configuration: Configuration = .default
+        configuration: Configuration = .default,
+        validator: (any JSONSchemaValidator)? = nil
     ) {
         self.serverInfo = Server.Info(
             name: name,
@@ -861,6 +868,7 @@ public actor Server {
         self.capabilities = capabilities
         self.configuration = configuration
         self.instructions = instructions
+        self.validator = validator ?? DefaultJSONSchemaValidator()
     }
 
     /// Start the server
@@ -999,6 +1007,120 @@ public actor Server {
 
     public func waitUntilCompleted() async {
         await task?.value
+    }
+
+    // MARK: - Tool Registration and Validation
+
+    /// Register tools for schema validation.
+    ///
+    /// Tools registered here will have their input schemas validated when called
+    /// via `withValidatedToolHandler()`, and their output schemas validated when
+    /// the handler returns a result with `structuredContent`.
+    ///
+    /// This method populates the internal tool cache used for validation. It does
+    /// NOT register a `ListTools` handler - you must still provide that handler
+    /// to return tools to the client.
+    ///
+    /// - Parameter tools: The tools to register for validation.
+    ///
+    /// Example:
+    /// ```swift
+    /// let tools = [
+    ///     Tool(name: "search", description: "Search for items", inputSchema: searchSchema),
+    ///     Tool(name: "create", description: "Create an item", inputSchema: createSchema, outputSchema: resultSchema)
+    /// ]
+    ///
+    /// server.registerTools(tools)
+    ///
+    /// server.withRequestHandler(ListTools.self) { _, _ in
+    ///     ListTools.Result(tools: server.registeredTools)
+    /// }
+    /// ```
+    public func registerTools(_ tools: [Tool]) {
+        for tool in tools {
+            toolCache[tool.name] = tool
+        }
+    }
+
+    /// All tools registered for validation.
+    ///
+    /// Use this in your `ListTools` handler to return the registered tools:
+    /// ```swift
+    /// server.withRequestHandler(ListTools.self) { _, _ in
+    ///     ListTools.Result(tools: server.registeredTools)
+    /// }
+    /// ```
+    public var registeredTools: [Tool] {
+        Array(toolCache.values)
+    }
+
+    /// Register a tool handler with automatic input and output validation.
+    ///
+    /// This method wraps the `CallTool` handler with validation logic that:
+    /// 1. Validates input arguments against the tool's `inputSchema`
+    /// 2. Calls your handler
+    /// 3. Validates the result's `structuredContent` against the tool's `outputSchema` (if defined)
+    ///
+    /// Tools must be registered via `registerTools()` before calling this method.
+    /// Unknown tools will receive an error response.
+    ///
+    /// - Parameter handler: The tool execution handler.
+    ///
+    /// Example:
+    /// ```swift
+    /// server.registerTools([searchTool, createTool])
+    ///
+    /// server.withValidatedToolHandler { params, ctx in
+    ///     switch params.name {
+    ///     case "search":
+    ///         // Input already validated against searchTool.inputSchema
+    ///         let results = try await performSearch(params.arguments)
+    ///         return CallTool.Result(content: [.text(results)])
+    ///     case "create":
+    ///         let item = try await createItem(params.arguments)
+    ///         // If createTool.outputSchema is set, structuredContent will be validated
+    ///         return CallTool.Result(
+    ///             content: [.text("Created")],
+    ///             structuredContent: item.asValue()
+    ///         )
+    ///     default:
+    ///         throw MCPError.invalidParams("Unknown tool: \(params.name)")
+    ///     }
+    /// }
+    /// ```
+    @discardableResult
+    public func withValidatedToolHandler(
+        handler: @escaping @Sendable (CallTool.Parameters, RequestHandlerContext) async throws -> CallTool.Result
+    ) -> Self {
+        withRequestHandler(CallTool.self) { params, ctx in
+            let name = params.name
+
+            // Look up tool in cache (access actor-isolated property)
+            guard let tool = await self.toolCache[name] else {
+                throw MCPError.invalidParams("Unknown tool: \(name)")
+            }
+
+            // Validate input against inputSchema
+            let inputValue: Value = params.arguments.map { .object($0) } ?? .object([:])
+            try self.validator.validate(inputValue, against: tool.inputSchema)
+
+            // Execute the handler
+            let result = try await handler(params, ctx)
+
+            // Validate output against outputSchema if present
+            if let outputSchema = tool.outputSchema {
+                if let structuredContent = result.structuredContent {
+                    try self.validator.validate(structuredContent, against: outputSchema)
+                } else if !(result.isError ?? false) {
+                    // Tool has outputSchema but no structuredContent (and not an error)
+                    throw MCPError.invalidParams(
+                        "Tool '\(name)' has an output schema but no structured content was provided"
+                    )
+                }
+            }
+
+            return result
+        }
     }
 
     // MARK: - Registration

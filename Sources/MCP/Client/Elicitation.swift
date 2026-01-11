@@ -468,6 +468,35 @@ extension PrimitiveSchemaDefinition: Codable {
     }
 }
 
+extension PrimitiveSchemaDefinition {
+    /// The default value for this schema field, if defined.
+    ///
+    /// Used by `Server.elicit()` to apply schema defaults to missing form fields
+    /// before validation.
+    public var `default`: ElicitValue? {
+        switch self {
+        case .string(let schema):
+            return schema.defaultValue.map { .string($0) }
+        case .number(let schema):
+            guard let value = schema.defaultValue else { return nil }
+            // Use int if the schema specifies integer type
+            return schema.type == "integer" ? .int(Int(value)) : .double(value)
+        case .boolean(let schema):
+            return schema.defaultValue.map { .bool($0) }
+        case .untitledEnum(let schema):
+            return schema.defaultValue.map { .string($0) }
+        case .titledEnum(let schema):
+            return schema.defaultValue.map { .string($0) }
+        case .legacyTitledEnum(let schema):
+            return schema.defaultValue.map { .string($0) }
+        case .untitledMultiSelect(let schema):
+            return schema.defaultValue.map { .strings($0) }
+        case .titledMultiSelect(let schema):
+            return schema.defaultValue.map { .strings($0) }
+        }
+    }
+}
+
 // MARK: - Elicitation Request
 
 /// Parameters for a form-mode elicitation request.

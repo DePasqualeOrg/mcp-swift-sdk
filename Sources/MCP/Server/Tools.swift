@@ -378,9 +378,9 @@ public enum CallTool: Method {
 
     public struct Parameters: Hashable, Codable, Sendable {
         public let name: String
-        // TODO: Add server-side input validation against the tool's inputSchema.
-        // TypeScript and Python SDKs validate arguments against the tool's inputSchema
-        // before calling the handler. This requires a tool cache to look up the schema.
+        /// The arguments to pass to the tool.
+        /// When using `Server.withValidatedToolHandler()`, arguments are validated
+        /// against the tool's `inputSchema` before the handler is called.
         public let arguments: [String: Value]?
         /// Task metadata for task-augmented requests.
         /// When present, the request becomes task-augmented and returns a `CreateTaskResult`
@@ -409,9 +409,8 @@ public enum CallTool: Method {
         public let content: [Tool.Content]
         /// An optional JSON object that represents the structured result of the tool call.
         /// If the tool defined an `outputSchema`, this should conform to that schema.
-        // TODO: Add server-side output validation against the tool's outputSchema.
-        // TypeScript and Python SDKs validate structuredContent against outputSchema
-        // after the handler returns. This requires a tool cache to look up the schema.
+        /// When using `Server.withValidatedToolHandler()`, this is validated against
+        /// the tool's `outputSchema` after the handler returns.
         public let structuredContent: Value?
         /// Whether the tool call ended in an error.
         public let isError: Bool?
