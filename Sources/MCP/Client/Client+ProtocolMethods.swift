@@ -142,12 +142,10 @@ extension Client {
         let request = CallTool.request(.init(name: name, arguments: arguments))
         let result = try await send(request)
 
-        // Auto-refresh tool cache if tool not found (matches Python SDK behavior)
-        if toolOutputSchemas[name] == nil {
-            _ = try? await listTools()
-        }
-
-        // Validate output against cached schema if present
+        // Validate output against cached schema if present.
+        // We intentionally don't auto-refresh the cache if the tool is missing (unlike Python SDK).
+        // Rationale: auto-refresh is a hidden side effect, and if the client cares about validation,
+        // they should call listTools() first. This matches TypeScript SDK behavior.
         if let outputSchema = toolOutputSchemas[name] {
             if let structuredContent = result.structuredContent {
                 try validator.validate(structuredContent, against: outputSchema)
