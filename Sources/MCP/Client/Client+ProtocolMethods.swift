@@ -98,6 +98,10 @@ extension Client {
 
     /// List available tools from the server.
     ///
+    /// Output schemas from tools are cached for client-side validation when
+    /// `callTool()` is called. To validate tool results, call this method
+    /// at least once before calling tools.
+    ///
     /// - Parameter cursor: Optional cursor for pagination.
     /// - Returns: The list result containing tools and optional next cursor.
     public func listTools(cursor: String? = nil) async throws -> ListTools.Result {
@@ -108,24 +112,54 @@ extension Client {
         } else {
             request = ListTools.request(.init())
         }
-        return try await send(request)
+        let result = try await send(request)
+
+        // Cache output schemas for client-side validation
+        for tool in result.tools {
+            if let outputSchema = tool.outputSchema {
+                toolOutputSchemas[tool.name] = outputSchema
+            }
+        }
+
+        return result
     }
 
     /// Call a tool by name.
+    ///
+    /// If the tool has an output schema, the result's `structuredContent` will be
+    /// validated against it. Output schemas are cached from `listTools()` calls.
+    /// If the tool is not in the cache, the cache is automatically refreshed.
     ///
     /// - Parameters:
     ///   - name: The name of the tool to call.
     ///   - arguments: Optional arguments to pass to the tool.
     /// - Returns: The tool call result containing content, structured content, and error flag.
+    /// - Throws: `MCPError.invalidParams` if output validation fails.
     public func callTool(name: String, arguments: [String: Value]? = nil) async throws
         -> CallTool.Result
     {
         try validateServerCapability(\.tools, "Tools")
         let request = CallTool.request(.init(name: name, arguments: arguments))
-        // TODO: Add client-side output validation against the tool's outputSchema.
-        // TypeScript and Python SDKs cache tool outputSchemas from listTools() and
-        // validate structuredContent when receiving tool results.
-        return try await send(request)
+        let result = try await send(request)
+
+        // Auto-refresh tool cache if tool not found (matches Python SDK behavior)
+        if toolOutputSchemas[name] == nil {
+            _ = try? await listTools()
+        }
+
+        // Validate output against cached schema if present
+        if let outputSchema = toolOutputSchemas[name] {
+            if let structuredContent = result.structuredContent {
+                try validator.validate(structuredContent, against: outputSchema)
+            } else if !(result.isError ?? false) {
+                // Tool has outputSchema but server returned no structuredContent
+                throw MCPError.invalidParams(
+                    "Tool '\(name)' has an output schema but server returned no structured content"
+                )
+            }
+        }
+
+        return result
     }
 
     // MARK: - Completions

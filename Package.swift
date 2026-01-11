@@ -8,6 +8,7 @@ var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-system.git", from: "1.0.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     .package(url: "https://github.com/mattt/eventsource.git", from: "1.1.0"),
+    .package(url: "https://github.com/ajevans99/swift-json-schema", from: "0.2.1"),
     .package(path: "../swift-docc-plugin"),
     // TODO: Remove after https://github.com/swiftlang/swift-docc/pull/1417 is merged
     .package(path: "../swift-docc"),
@@ -20,6 +21,7 @@ var targetDependencies: [Target.Dependency] = [
     .product(
         name: "EventSource", package: "eventsource",
         condition: .when(platforms: [.macOS, .iOS, .tvOS, .visionOS, .watchOS, .macCatalyst])),
+    .product(name: "JSONSchema", package: "swift-json-schema"),
 ]
 
 let package = Package(

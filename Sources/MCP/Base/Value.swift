@@ -400,3 +400,35 @@ extension String {
         }
     }
 }
+
+// MARK: - JSON Schema Validation
+
+import JSONSchema
+
+extension Value {
+    /// Converts this `Value` to a `JSONValue` for JSON Schema validation.
+    ///
+    /// MCP's `Value` type has a `.data` case for binary content that `JSONValue`
+    /// doesn't support. Data values are converted to data URL strings for validation.
+    public func toJSONValue() -> JSONValue {
+        switch self {
+        case .null:
+            return .null
+        case .bool(let b):
+            return .boolean(b)
+        case .int(let i):
+            return .integer(i)
+        case .double(let d):
+            return .number(d)
+        case .string(let s):
+            return .string(s)
+        case .data(let mimeType, let data):
+            // Data URLs are validated as strings
+            return .string(data.dataURLEncoded(mimeType: mimeType))
+        case .array(let arr):
+            return .array(arr.map { $0.toJSONValue() })
+        case .object(let obj):
+            return .object(obj.mapValues { $0.toJSONValue() })
+        }
+    }
+}

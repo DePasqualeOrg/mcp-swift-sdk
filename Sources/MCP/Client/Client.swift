@@ -430,6 +430,13 @@ public actor Client {
         }
     }
 
+    /// JSON Schema validator for validating tool outputs.
+    let validator: any JSONSchemaValidator
+
+    /// Cached tool output schemas from listTools() calls.
+    /// Used to validate tool results in callTool().
+    var toolOutputSchemas: [String: Value] = [:]
+
     /// A dictionary of type-erased pending requests, keyed by request ID
     var pendingRequests: [RequestId: AnyPendingRequest] = [:]
     /// Progress callbacks for requests, keyed by progress token.
@@ -567,7 +574,8 @@ public actor Client {
         description: String? = nil,
         icons: [Icon]? = nil,
         websiteUrl: String? = nil,
-        configuration: Configuration = .default
+        configuration: Configuration = .default,
+        validator: (any JSONSchemaValidator)? = nil
     ) {
         self.clientInfo = Client.Info(
             name: name,
@@ -579,6 +587,7 @@ public actor Client {
         )
         self.capabilities = Capabilities()
         self.configuration = configuration
+        self.validator = validator ?? DefaultJSONSchemaValidator()
     }
 
     /// Set the client capabilities.
