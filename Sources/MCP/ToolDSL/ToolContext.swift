@@ -200,11 +200,3 @@ public struct HandlerContext: Sendable {
     }
 }
 
-// MARK: - Backwards Compatibility
-
-/// Backwards-compatible alias for `HandlerContext`.
-///
-/// Use `HandlerContext` for new code. This typealias is provided for
-/// compatibility with existing code that uses `ToolContext`.
-@available(*, deprecated, renamed: "HandlerContext")
-public typealias ToolContext = HandlerContext

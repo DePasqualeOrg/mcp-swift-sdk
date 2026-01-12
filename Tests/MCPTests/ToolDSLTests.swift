@@ -14,7 +14,7 @@ struct EchoTool {
     @Parameter(description: "Message to echo")
     var message: String
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Echo: \(message)"
     }
 }
@@ -34,7 +34,7 @@ struct CalculatorTool {
     @Parameter(description: "Operation to perform")
     var operation: String
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         let result: Double
         switch operation {
         case "add": result = a + b
@@ -59,7 +59,7 @@ struct GreetTool {
     @Parameter(description: "Optional greeting prefix")
     var prefix: String?
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         let greeting = prefix ?? "Hello"
         return "\(greeting), \(name)!"
     }
@@ -77,7 +77,7 @@ struct PaginatedListTool {
     @Parameter(description: "Page number", minimum: 1)
     var page: Int = 1
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Showing page \(page) with \(pageSize) items"
     }
 }
@@ -91,7 +91,7 @@ struct ProcessItemsTool {
     @Parameter(description: "Items to process")
     var items: [String]
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Processed \(items.count) items: \(items.joined(separator: ", "))"
     }
 }
@@ -108,7 +108,7 @@ struct ScheduleTool {
     @Parameter(description: "Event date")
     var eventDate: Date
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         let formatter = ISO8601DateFormatter()
         return "Scheduled '\(eventName)' for \(formatter.string(from: eventDate))"
     }
@@ -126,7 +126,7 @@ struct CustomKeyTool {
     @Parameter(key: "end_date", description: "End date")
     var endDate: String
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Range: \(startDate) to \(endDate)"
     }
 }
@@ -141,7 +141,7 @@ struct ReadOnlyTool {
     @Parameter(description: "Config key")
     var key: String
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Config[\(key)] = some_value"
     }
 }
@@ -158,7 +158,7 @@ struct FilterTool {
     @Parameter(description: "Maximum items to return")
     var limit: Int
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Filtered with archived=\(includeArchived), limit=\(limit)"
     }
 }
@@ -172,7 +172,7 @@ struct ConstrainedTool {
     @Parameter(description: "Username", minLength: 3, maxLength: 20)
     var username: String
 
-    func perform(context: ToolContext) async throws -> String { username }
+    func perform(context: HandlerContext) async throws -> String { username }
 }
 
 /// Enum for priority levels
@@ -197,7 +197,7 @@ struct CreateTaskTool {
     @Parameter(description: "Task priority")
     var priority: Priority
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Created task '\(title)' with priority: \(priority.rawValue)"
     }
 }
@@ -222,7 +222,7 @@ struct SearchTool {
     @Parameter(description: "Maximum results")
     var maxResults: Int = 10
 
-    func perform(context: ToolContext) async throws -> SearchResult {
+    func perform(context: HandlerContext) async throws -> SearchResult {
         SearchResult(
             query: query,
             totalCount: 42,
@@ -243,7 +243,7 @@ struct HttpRequestTool {
     @Parameter(description: "HTTP headers")
     var headers: [String: String]
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         let headerList = headers.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
         return "Request to \(url) with headers: \(headerList)"
     }
@@ -259,7 +259,7 @@ struct StrictTool {
     @Parameter(description: "Input value")
     var input: String
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         "Received: \(input)"
     }
 }
@@ -273,7 +273,7 @@ struct MatrixTool {
     @Parameter(description: "2D matrix of integers")
     var matrix: [[Int]]
 
-    func perform(context: ToolContext) async throws -> String {
+    func perform(context: HandlerContext) async throws -> String {
         let rows = matrix.count
         let cols = matrix.first?.count ?? 0
         return "Matrix: \(rows)x\(cols)"
@@ -670,8 +670,8 @@ struct ParseMethodTests {
 @Suite("Tool DSL - Tool Execution")
 struct ToolExecutionTests {
 
-    /// Creates a mock ToolContext for testing
-    func createMockContext() -> ToolContext {
+    /// Creates a mock HandlerContext for testing
+    func createMockContext() -> HandlerContext {
         let handlerContext = Server.RequestHandlerContext(
             sendNotification: { _ in },
             sendMessage: { _ in },
@@ -686,7 +686,7 @@ struct ToolExecutionTests {
             shouldSendLogMessage: { _ in true },
             sendRequest: { _ in throw MCPError.internalError("Not implemented") }
         )
-        return ToolContext(handlerContext: handlerContext)
+        return HandlerContext(handlerContext: handlerContext)
     }
 
     @Test("Tool execution returns expected string output")
@@ -932,8 +932,8 @@ struct ToolRegistryTests {
         #expect(structured?["query"]?.stringValue == "test search")
     }
 
-    /// Creates a mock ToolContext for testing
-    private func createMockContext() -> ToolContext {
+    /// Creates a mock HandlerContext for testing
+    private func createMockContext() -> HandlerContext {
         let handlerContext = Server.RequestHandlerContext(
             sendNotification: { _ in },
             sendMessage: { _ in },
@@ -948,7 +948,7 @@ struct ToolRegistryTests {
             shouldSendLogMessage: { _ in true },
             sendRequest: { _ in throw MCPError.internalError("Not implemented") }
         )
-        return ToolContext(handlerContext: handlerContext)
+        return HandlerContext(handlerContext: handlerContext)
     }
 }
 

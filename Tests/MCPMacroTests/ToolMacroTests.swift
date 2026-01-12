@@ -20,7 +20,7 @@ final class ToolMacroTests: XCTestCase {
             struct BadTool {
                 static let description = "Missing name"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -29,7 +29,7 @@ final class ToolMacroTests: XCTestCase {
             struct BadTool {
                 static let description = "Missing name"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -48,7 +48,7 @@ final class ToolMacroTests: XCTestCase {
             struct BadTool {
                 static let name = "bad_tool"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -57,7 +57,7 @@ final class ToolMacroTests: XCTestCase {
             struct BadTool {
                 static let name = "bad_tool"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -99,7 +99,7 @@ final class ToolMacroTests: XCTestCase {
                 static let name = "invalid tool name"
                 static let description = "Has spaces"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -109,7 +109,7 @@ final class ToolMacroTests: XCTestCase {
                 static let name = "invalid tool name"
                 static let description = "Has spaces"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -130,7 +130,7 @@ final class ToolMacroTests: XCTestCase {
                 static let name = "\(longName)"
                 static let description = "Name too long"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -140,7 +140,7 @@ final class ToolMacroTests: XCTestCase {
                 static let name = "\(longName)"
                 static let description = "Name too long"
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -161,7 +161,7 @@ final class ToolMacroTests: XCTestCase {
                 static let description = "Duplicate annotations"
                 static let annotations: [AnnotationOption] = [.readOnly, .readOnly]
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -172,7 +172,7 @@ final class ToolMacroTests: XCTestCase {
                 static let description = "Duplicate annotations"
                 static let annotations: [AnnotationOption] = [.readOnly, .readOnly]
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -195,7 +195,7 @@ final class ToolMacroTests: XCTestCase {
                 @Parameter(description: "Start date")
                 var startDate: Date = Date()
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
@@ -208,7 +208,7 @@ final class ToolMacroTests: XCTestCase {
                 @Parameter(description: "Start date")
                 var startDate: Date = Date()
 
-                func perform(context: ToolContext) async throws -> String {
+                func perform(context: HandlerContext) async throws -> String {
                     "Result"
                 }
             }
