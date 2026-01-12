@@ -142,9 +142,9 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
             seen.insert(annotation)
         }
 
-        // Add ToolSpec conformance
+        // Add ToolSpec and Sendable conformance
         let extensionDecl: DeclSyntax = """
-            extension \(type): ToolSpec {}
+            extension \(type): ToolSpec, Sendable {}
             """
 
         guard let ext = extensionDecl.as(ExtensionDeclSyntax.self) else {
@@ -549,6 +549,15 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
     }
 
     private static func generateParseMethod(toolInfo: ToolInfo) -> DeclSyntax {
+        // For tools with no parameters, generate a simple parse method
+        if toolInfo.parameters.isEmpty {
+            return """
+                public static func parse(from arguments: [String: Value]?) throws -> Self {
+                    Self()
+                }
+                """
+        }
+
         var parseStatements: [String] = []
 
         for param in toolInfo.parameters {

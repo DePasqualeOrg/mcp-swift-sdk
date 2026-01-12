@@ -88,5 +88,5 @@ extension ToolSpec {
 /// }
 /// ```
 @attached(member, names: named(toolDefinition), named(parse), named(init))
-@attached(extension, conformances: ToolSpec)
+@attached(extension, conformances: ToolSpec, Sendable)
 public macro Tool() = #externalMacro(module: "MCPMacros", type: "ToolMacro")
