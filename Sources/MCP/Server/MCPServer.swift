@@ -207,27 +207,66 @@ public actor MCPServer {
         _ = await session.withRequestHandler(CallTool.self) { [toolRegistry, validator] request, handlerContext in
             let name = request.name
 
+            // Helper to extract error message
+            // Uses localizedDescription which works for LocalizedError types,
+            // falls back to type description for other errors
+            func errorMessage(_ error: Error) -> String {
+                let description = error.localizedDescription
+                // localizedDescription returns generic "operation couldn't be completed" for
+                // non-LocalizedError types, so fall back to String(describing:) in that case.
+                // Check for both straight quote (') and typographic apostrophe (U+2019)
+                if description.contains("operation couldn't be completed")
+                    || description.contains("operation couldn\u{2019}t be completed")
+                {
+                    return String(describing: error)
+                }
+                return description
+            }
+
+            // Helper to create tool error result
+            func toolError(_ message: String) -> CallTool.Result {
+                CallTool.Result(
+                    content: [.text(message, annotations: nil, _meta: nil)],
+                    isError: true
+                )
+            }
+
             // Get tool definition for validation
+            // Unknown tool is a protocol error per MCP spec
             guard let toolDef = await toolRegistry.toolDefinition(for: name) else {
                 throw MCPError.invalidParams("Unknown tool: \(name)")
             }
 
             // Validate input against schema
+            // Schema validation errors are tool execution errors per MCP spec,
+            // providing actionable feedback that LLMs can use to self-correct
             let inputValue: Value = request.arguments.map { .object($0) } ?? .object([:])
-            try validator.validate(inputValue, against: toolDef.inputSchema)
+            do {
+                try validator.validate(inputValue, against: toolDef.inputSchema)
+            } catch {
+                return toolError("Input validation error: \(errorMessage(error))")
+            }
 
-            // Execute
+            // Execute tool and catch errors
+            // Tool execution errors are returned with isError: true per MCP spec
             let context = HandlerContext(
                 handlerContext: handlerContext,
                 progressToken: request._meta?.progressToken
             )
-            let result = try await toolRegistry.execute(
-                name,
-                arguments: request.arguments,
-                context: context
-            )
+
+            let result: CallTool.Result
+            do {
+                result = try await toolRegistry.execute(
+                    name,
+                    arguments: request.arguments,
+                    context: context
+                )
+            } catch {
+                return toolError(errorMessage(error))
+            }
 
             // Validate output against schema if present
+            // Output validation errors indicate server bugs, so remain as protocol errors
             if let outputSchema = toolDef.outputSchema {
                 if let structuredContent = result.structuredContent {
                     try validator.validate(structuredContent, against: outputSchema)
@@ -300,6 +339,45 @@ public actor MCPServer {
 
 // MARK: - Tool Registration
 
+/// Tool registration and error handling.
+///
+/// ## Error Handling
+///
+/// When a tool throws an error during execution, the MCP server handles it according to
+/// the MCP specification (see "Error Handling" section of the Tools spec):
+///
+/// - **Tool execution errors** are returned to the LLM with `isError: true`, providing
+///   actionable feedback that enables self-correction and retry with adjusted parameters.
+///   This includes input validation errors (e.g., wrong type, missing required field).
+///
+/// - **Protocol errors** (unknown tool, malformed request) are returned as JSON-RPC errors.
+///
+/// Note: The TypeScript SDK incorrectly throws protocol errors for input validation failures.
+/// This Swift SDK and the Python SDK correctly return `isError: true` per the MCP spec.
+///
+/// ## Providing Actionable Error Messages
+///
+/// For the best LLM experience, make your error types conform to `LocalizedError` and
+/// provide clear, actionable `errorDescription` values:
+///
+/// ```swift
+/// enum MyToolError: LocalizedError {
+///     case invalidDate(String)
+///     case resourceNotFound(String)
+///
+///     var errorDescription: String? {
+///         switch self {
+///         case .invalidDate(let date):
+///             return "Invalid date '\(date)': must be in ISO 8601 format (e.g., 2024-01-15)"
+///         case .resourceNotFound(let id):
+///             return "Resource '\(id)' not found. Use list_resources to see available resources."
+///         }
+///     }
+/// }
+/// ```
+///
+/// Errors conforming to `LocalizedError` will have their `errorDescription` surfaced directly
+/// to the LLM. For other error types, the server uses `String(describing:)` as a fallback.
 extension MCPServer {
     // MARK: DSL-Based Tools
 

@@ -73,11 +73,18 @@ struct ToolInputValidationIntegrationTests {
         let client = Client(name: "test-client", version: "1.0.0")
         _ = try await client.connect(transport: clientTransport)
 
-        await #expect(throws: MCPError.self) {
-            _ = try await client.callTool(
-                name: "add",
-                arguments: ["a": .int(5)]
-            )
+        // Per MCP spec, input validation errors are tool execution errors (isError: true),
+        // not protocol errors. This allows LLMs to receive actionable feedback.
+        let result = try await client.callTool(
+            name: "add",
+            arguments: ["a": .int(5)]
+        )
+
+        #expect(result.isError == true)
+        if case .text(let text, _, _) = result.content.first {
+            #expect(text.lowercased().contains("validation"))
+        } else {
+            Issue.record("Expected text content in error result")
         }
     }
 
@@ -107,11 +114,18 @@ struct ToolInputValidationIntegrationTests {
         let client = Client(name: "test-client", version: "1.0.0")
         _ = try await client.connect(transport: clientTransport)
 
-        await #expect(throws: MCPError.self) {
-            _ = try await client.callTool(
-                name: "add",
-                arguments: ["a": .string("not a number"), "b": .int(3)]
-            )
+        // Per MCP spec, input validation errors are tool execution errors (isError: true),
+        // not protocol errors. This allows LLMs to receive actionable feedback.
+        let result = try await client.callTool(
+            name: "add",
+            arguments: ["a": .string("not a number"), "b": .int(3)]
+        )
+
+        #expect(result.isError == true)
+        if case .text(let text, _, _) = result.content.first {
+            #expect(text.lowercased().contains("validation"))
+        } else {
+            Issue.record("Expected text content in error result")
         }
     }
 
@@ -143,16 +157,14 @@ struct ToolInputValidationIntegrationTests {
         let client = Client(name: "test-client", version: "1.0.0")
         _ = try await client.connect(transport: clientTransport)
 
-        do {
-            _ = try await client.callTool(
-                name: "guarded_tool",
-                arguments: ["value": .string("not a number")]
-            )
-            Issue.record("Expected MCPError to be thrown")
-        } catch {
-            // Expected
-        }
+        // Per MCP spec, input validation errors return isError: true (not thrown).
+        // The key assertion here is that the handler is NOT called.
+        let result = try await client.callTool(
+            name: "guarded_tool",
+            arguments: ["value": .string("not a number")]
+        )
 
+        #expect(result.isError == true)
         #expect(handlerCalled.isSet() == false)
     }
 }
