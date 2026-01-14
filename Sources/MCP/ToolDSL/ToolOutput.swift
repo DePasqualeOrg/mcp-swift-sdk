@@ -10,7 +10,7 @@ import Foundation
 ///
 /// Example:
 /// ```swift
-/// func perform(context: HandlerContext) async throws -> String {
+/// func perform() async throws -> String {
 ///     "Hello, world!"
 /// }
 /// ```
@@ -34,7 +34,7 @@ extension String: ToolOutput {
 ///
 /// Example:
 /// ```swift
-/// func perform(context: HandlerContext) async throws -> ImageOutput {
+/// func perform() async throws -> ImageOutput {
 ///     let imageData = try await captureScreen()
 ///     return ImageOutput(pngData: imageData)
 /// }
@@ -78,7 +78,7 @@ public struct ImageOutput: ToolOutput, Sendable {
 ///
 /// Example:
 /// ```swift
-/// func perform(context: HandlerContext) async throws -> AudioOutput {
+/// func perform() async throws -> AudioOutput {
 ///     let audioData = try await synthesizeSpeech(text: text)
 ///     return AudioOutput(data: audioData, mimeType: "audio/mpeg")
 /// }
@@ -110,7 +110,7 @@ public struct AudioOutput: ToolOutput, Sendable {
 ///
 /// Example:
 /// ```swift
-/// func perform(context: HandlerContext) async throws -> MultiContent {
+/// func perform() async throws -> MultiContent {
 ///     MultiContent([
 ///         .text("Analysis complete"),
 ///         .image(data: chartData.base64EncodedString(), mimeType: "image/png", metadata: nil)
@@ -153,7 +153,7 @@ public struct MultiContent: ToolOutput, Sendable {
 ///     static let name = "get_events"
 ///     static let description = "Get events"
 ///
-///     func perform(context: HandlerContext) async throws -> EventList {
+///     func perform() async throws -> EventList {
 ///         EventList(events: ["Event 1", "Event 2"], totalCount: 2)
 ///     }
 /// }

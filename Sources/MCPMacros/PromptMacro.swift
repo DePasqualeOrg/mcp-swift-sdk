@@ -9,12 +9,13 @@ import SwiftSyntaxMacros
 /// - `static let description: String` - The prompt description
 /// - `static let title: String` (optional) - Display title
 /// - Properties with `@Argument` attribute - Prompt arguments
-/// - `func render(context:)` - The render method
+/// - `func render()` or `func render(context:)` - The render method
 ///
 /// It generates:
 /// - `static var promptDefinition: Prompt` - The prompt definition with arguments
 /// - `static func parse(from:)` - Argument parsing
 /// - `init()` - Empty initializer
+/// - `func render(context:)` - Bridging method (only if you write `render()` without context)
 public struct PromptMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - MemberMacro
@@ -37,6 +38,15 @@ public struct PromptMacro: MemberMacro, ExtensionMacro {
         members.append("""
             public init() {}
             """)
+
+        // Generate bridging render(context:) if user wrote render() without context
+        if !promptInfo.hasContextParameter {
+            members.append("""
+                public func render(context: HandlerContext) async throws -> \(raw: promptInfo.outputType) {
+                    try await render()
+                }
+                """)
+        }
 
         // Generate promptDefinition
         let definitionDecl = generatePromptDefinition(promptInfo: promptInfo)
@@ -101,6 +111,8 @@ public struct PromptMacro: MemberMacro, ExtensionMacro {
         var description: String
         var title: String?
         var arguments: [ArgumentInfo]
+        var outputType: String  // The return type of render()
+        var hasContextParameter: Bool  // Whether render() takes a context parameter
     }
 
     private struct ArgumentInfo {
@@ -120,6 +132,8 @@ public struct PromptMacro: MemberMacro, ExtensionMacro {
         var description: String?
         var title: String?
         var arguments: [ArgumentInfo] = []
+        var outputType: String = "[Prompt.Message]"  // Default output type
+        var hasContextParameter: Bool = true  // Default to true for backwards compatibility
 
         for member in structDecl.memberBlock.members {
             let decl = member.decl
@@ -177,6 +191,19 @@ public struct PromptMacro: MemberMacro, ExtensionMacro {
                     }
                 }
             }
+
+            // Look for render method to get output type and check for context parameter
+            if let funcDecl = decl.as(FunctionDeclSyntax.self),
+               funcDecl.name.text == "render" {
+                if let returnClause = funcDecl.signature.returnClause {
+                    outputType = returnClause.type.trimmedDescription
+                }
+                // Check if the render method has a context parameter
+                let parameterList = funcDecl.signature.parameterClause.parameters
+                hasContextParameter = parameterList.contains { param in
+                    param.firstName.text == "context" || param.secondName?.text == "context"
+                }
+            }
         }
 
         guard let promptName = name else {
@@ -191,7 +218,9 @@ public struct PromptMacro: MemberMacro, ExtensionMacro {
             name: promptName,
             description: promptDescription,
             title: title,
-            arguments: arguments
+            arguments: arguments,
+            outputType: outputType,
+            hasContextParameter: hasContextParameter
         )
     }
 

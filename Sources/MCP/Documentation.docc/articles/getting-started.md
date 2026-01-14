@@ -20,7 +20,7 @@ struct Greet {
     @Parameter(description: "Name to greet")
     var name: String
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         "Hello, \(name)!"
     }
 }

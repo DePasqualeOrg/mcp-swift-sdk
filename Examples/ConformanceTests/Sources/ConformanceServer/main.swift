@@ -307,7 +307,7 @@ struct TestSimpleText {
     static let name = "test_simple_text"
     static let description = "Returns simple text content for conformance testing"
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         "This is a simple text response for testing."
     }
 }
@@ -318,7 +318,7 @@ struct TestImageContent {
     static let name = "test_image_content"
     static let description = "Returns image content for conformance testing"
 
-    func perform(context: HandlerContext) async throws -> ImageOutput {
+    func perform() async throws -> ImageOutput {
         ImageOutput(pngData: TestData.redPixelPNGData)
     }
 }
@@ -329,7 +329,7 @@ struct TestAudioContent {
     static let name = "test_audio_content"
     static let description = "Returns audio content for conformance testing"
 
-    func perform(context: HandlerContext) async throws -> AudioOutput {
+    func perform() async throws -> AudioOutput {
         AudioOutput(data: TestData.silentWAVData, mimeType: "audio/wav")
     }
 }
@@ -340,7 +340,7 @@ struct TestEmbeddedResource {
     static let name = "test_embedded_resource"
     static let description = "Returns embedded resource content for conformance testing"
 
-    func perform(context: HandlerContext) async throws -> MultiContent {
+    func perform() async throws -> MultiContent {
         let resourceContent = Resource.Contents.text("Embedded resource text content", uri: "test://static-text", mimeType: "text/plain")
         return MultiContent([.resource(resource: resourceContent, annotations: nil, _meta: nil)])
     }
@@ -352,7 +352,7 @@ struct TestMultipleContentTypes {
     static let name = "test_multiple_content_types"
     static let description = "Returns mixed content types for conformance testing"
 
-    func perform(context: HandlerContext) async throws -> MultiContent {
+    func perform() async throws -> MultiContent {
         let resourceContent = Resource.Contents.text("{\"test\":\"data\",\"value\":123}", uri: "test://mixed-content-resource", mimeType: "application/json")
         return MultiContent([
             .text("Multiple content types test:"),
@@ -368,7 +368,7 @@ struct TestErrorHandling {
     static let name = "test_error_handling"
     static let description = "Returns an error for conformance testing"
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         throw MCPError.invalidRequest("Test error message")
     }
 }

@@ -26,7 +26,7 @@ struct CodeReview {
     @Argument(description: "Code to review")
     var code: String
 
-    func render(context: HandlerContext) async throws -> [Prompt.Message] {
+    func render() async throws -> [Prompt.Message] {
         [
             .user("Please review this \(language) code for best practices:\n\n```\(language)\n\(code)\n```"),
             .assistant("I'll analyze this code for potential improvements...")
@@ -34,6 +34,8 @@ struct CodeReview {
     }
 }
 ```
+
+Most prompts don't need the `HandlerContext`, so you can write `render()` without any parameters. If needed, you can include a `context` parameter to access logging or request metadata.
 
 ### Argument Options
 
@@ -51,7 +53,7 @@ struct Summarize {
     @Argument(description: "Summary length: short, medium, long")
     var length: String?  // Optional argument
 
-    func render(context: HandlerContext) async throws -> [Prompt.Message] {
+    func render() async throws -> [Prompt.Message] {
         let lengthHint = length.map { " Keep it \($0)." } ?? ""
         return [.user("Summarize the following:\n\n\(content)\(lengthHint)")]
     }
@@ -157,7 +159,7 @@ Prompt messages can have different roles:
 ### User Messages
 
 ```swift
-func render(context: HandlerContext) async throws -> [Prompt.Message] {
+func render() async throws -> [Prompt.Message] {
     [.user("Analyze this data...")]
 }
 ```
@@ -230,7 +232,7 @@ struct Explain {
     @Argument(description: "Level: beginner, intermediate, expert")
     var level: String?
 
-    func render(context: HandlerContext) async throws -> [Prompt.Message] {
+    func render() async throws -> [Prompt.Message] {
         let levelText = level ?? "beginner"
         return [.user("Explain \(topic) at a \(levelText) level.")]
     }
@@ -251,7 +253,7 @@ struct Translate {
     @Argument(description: "Target language")
     var to: String
 
-    func render(context: HandlerContext) async throws -> [Prompt.Message] {
+    func render() async throws -> [Prompt.Message] {
         [.user("Translate the following from \(from) to \(to):\n\n\(text)")]
     }
 }

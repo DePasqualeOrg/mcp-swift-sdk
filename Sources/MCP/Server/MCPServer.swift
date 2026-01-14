@@ -446,7 +446,7 @@ extension MCPServer {
     ///     static let name = "echo"
     ///     @Parameter(description: "Message to echo")
     ///     var message: String
-    ///     func perform(context: HandlerContext) async throws -> String { message }
+    ///     func perform() async throws -> String { message }
     /// }
     /// try await server.register(Echo.self)
     /// ```

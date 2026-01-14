@@ -133,6 +133,34 @@ struct StringOutputPrompt {
     }
 }
 
+/// Prompt with render() that doesn't require HandlerContext
+@Prompt
+struct SimpleRenderPrompt {
+    static let name = "simple_render_prompt"
+    static let description = "A prompt that doesn't need context"
+
+    @Argument(description: "User input")
+    var input: String
+
+    func render() async throws -> [Prompt.Message] {
+        [.user(.text("Simple render: \(input)"))]
+    }
+}
+
+/// Prompt with render() returning a single message
+@Prompt
+struct SimpleRenderSingleMessagePrompt {
+    static let name = "simple_render_single"
+    static let description = "Prompt with single message"
+
+    @Argument(description: "Message")
+    var message: String
+
+    func render() async throws -> Prompt.Message {
+        .assistant(.text("Response to: \(message)"))
+    }
+}
+
 // MARK: - PromptSpec Conformance Tests
 
 @Suite("Prompt DSL - PromptSpec Conformance")
@@ -144,6 +172,13 @@ struct PromptSpecConformanceTests {
         let _: any PromptSpec.Type = InterviewPrompt.self
         let _: any PromptSpec.Type = SummarizePrompt.self
         let _: any PromptSpec.Type = CodeReviewPrompt.self
+    }
+
+    @Test("Prompt with render() generates PromptSpec conformance")
+    func simpleRenderPromptGeneratesConformance() {
+        // Verify that prompts with render() (no context) also conform to PromptSpec
+        let _: any PromptSpec.Type = SimpleRenderPrompt.self
+        let _: any PromptSpec.Type = SimpleRenderSingleMessagePrompt.self
     }
 
     @Test("promptDefinition contains correct name and description")
@@ -407,6 +442,38 @@ struct RenderExecutionTests {
 
         let messages = try await prompt.render(context: context)
         #expect(messages.count == 1)
+    }
+
+    @Test("Prompt with render() works")
+    func simpleRenderPromptRender() async throws {
+        let args: [String: String] = ["input": "Hello simple render"]
+        let prompt = try SimpleRenderPrompt.parse(from: args)
+        let context = createMockContext()
+
+        // Prompts with render() should work with the bridging render(context:)
+        let messages = try await prompt.render(context: context)
+        #expect(messages.count == 1)
+        #expect(messages[0].role == .user)
+        if case .text(let text, _, _) = messages[0].content {
+            #expect(text == "Simple render: Hello simple render")
+        } else {
+            Issue.record("Expected text content")
+        }
+    }
+
+    @Test("Prompt with render() and single message output")
+    func simpleRenderSingleMessagePromptRender() async throws {
+        let args: [String: String] = ["message": "test message"]
+        let prompt = try SimpleRenderSingleMessagePrompt.parse(from: args)
+        let context = createMockContext()
+
+        let message = try await prompt.render(context: context)
+        #expect(message.role == .assistant)
+        if case .text(let text, _, _) = message.content {
+            #expect(text == "Response to: test message")
+        } else {
+            Issue.record("Expected text content")
+        }
     }
 }
 

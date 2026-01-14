@@ -138,7 +138,7 @@ struct Echo {
     @Parameter(description: "Message to echo")
     var message: String
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         "Echo: \(message)"
     }
 }

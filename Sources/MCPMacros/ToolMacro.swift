@@ -8,12 +8,13 @@ import SwiftSyntaxMacros
 /// - `static let name: String` - The tool name
 /// - `static let description: String` - The tool description
 /// - Properties with `@Parameter` attribute - Tool parameters
-/// - `func perform(context:)` - The execution method
+/// - `func perform()` or `func perform(context:)` - The execution method
 ///
 /// It generates:
 /// - `static var toolDefinition: Tool` - The tool definition with JSON Schema
 /// - `static func parse(from:)` - Argument parsing
 /// - `init()` - Empty initializer
+/// - `func perform(context:)` - Bridging method (only if you write `perform()` without context)
 public struct ToolMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - MemberMacro
@@ -41,6 +42,15 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
         members.append("""
             public init() {}
             """)
+
+        // Generate bridging perform(context:) if user wrote perform() without context
+        if !toolInfo.hasContextParameter {
+            members.append("""
+                public func perform(context: HandlerContext) async throws -> \(raw: toolInfo.outputType) {
+                    try await perform()
+                }
+                """)
+        }
 
         // Generate toolDefinition
         let toolDefinitionDecl = generateToolDefinition(
@@ -163,6 +173,7 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
         var outputType: String
         var annotations: [String]  // Annotation case names for validation
         var strictSchema: Bool
+        var hasContextParameter: Bool  // Whether perform() takes a context parameter
     }
 
     private struct ParameterInfo {
@@ -192,6 +203,7 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
         var annotations: [String] = []
         var annotationsSyntax: SyntaxProtocol?
         var strictSchema: Bool = false
+        var hasContextParameter: Bool = true  // Default to true for backwards compatibility
 
         for member in structDecl.memberBlock.members {
             let decl = member.decl
@@ -259,11 +271,16 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
                 }
             }
 
-            // Look for perform method to get output type
+            // Look for perform method to get output type and check for context parameter
             if let funcDecl = decl.as(FunctionDeclSyntax.self),
                funcDecl.name.text == "perform" {
                 if let returnClause = funcDecl.signature.returnClause {
                     outputType = returnClause.type.trimmedDescription
+                }
+                // Check if the perform method has a context parameter
+                let parameterList = funcDecl.signature.parameterClause.parameters
+                hasContextParameter = parameterList.contains { param in
+                    param.firstName.text == "context" || param.secondName?.text == "context"
                 }
             }
         }
@@ -299,7 +316,8 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
             parameters: parameters,
             outputType: outputType,
             annotations: annotations,
-            strictSchema: strictSchema
+            strictSchema: strictSchema,
+            hasContextParameter: hasContextParameter
         )
     }
 

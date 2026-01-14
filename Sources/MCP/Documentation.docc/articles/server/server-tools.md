@@ -36,12 +36,14 @@ struct GetWeather {
     @Parameter(description: "Temperature units", default: "metric")
     var units: String
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         let weather = await fetchWeather(location: location, units: units)
         return "Weather in \(location): \(weather.temperature)° \(weather.conditions)"
     }
 }
 ```
+
+Most tools don't need the `HandlerContext`, so you can write `perform()` without any parameters. If your tool needs progress reporting, logging, or request metadata, include the `context` parameter—see [Using HandlerContext](#Using-HandlerContext) below.
 
 ### Parameter Options
 
@@ -62,7 +64,7 @@ struct Search {
     @Parameter(description: "Include archived", default: false)
     var includeArchived: Bool
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         // ...
     }
 }
@@ -111,7 +113,7 @@ struct CreateEvent {
     @Parameter(description: "Priority (1-5)", minimum: 1, maximum: 5, default: 3)
     var priority: Int
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         // ...
     }
 }
@@ -134,7 +136,7 @@ struct CreateUser {
     @Parameter(key: "last_name", description: "User's last name")
     var lastName: String
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         "Created user: \(firstName) \(lastName)"
     }
 }
@@ -156,7 +158,7 @@ struct ScheduleMeeting {
     @Parameter(description: "Meeting end time (ISO 8601)")
     var endTime: Date?
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
@@ -181,7 +183,7 @@ struct SendNotifications {
     @Parameter(description: "Priority levels", default: [1, 2, 3])
     var priorities: [Int]
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         "Sent notifications to \(userIds.count) users"
     }
 }
@@ -216,7 +218,7 @@ struct ExportData {
     @Parameter(description: "Priority level")
     var priority: Priority?
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         "Exported data as \(format.rawValue)"
     }
 }
@@ -243,7 +245,7 @@ struct SetMetadata {
     @Parameter(description: "Numeric settings")
     var settings: [String: Int]?
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         "Set \(metadata.count) metadata entries on \(resourceId)"
     }
 }
@@ -316,6 +318,52 @@ await tool.remove()
 
 Disabled tools don't appear in `listTools` responses and reject execution attempts.
 
+## Using HandlerContext
+
+Include the `context` parameter when your tool needs capabilities like progress reporting, cancellation, or user interaction:
+
+```swift
+// Report progress for long-running operations
+func perform(context: HandlerContext) async throws -> String {
+    for i in 0..<items.count {
+        try await context.reportProgress(Double(i), total: Double(items.count))
+        process(items[i])
+    }
+    return "Done"
+}
+
+// Check for cancellation
+func perform(context: HandlerContext) async throws -> String {
+    for item in items {
+        try context.checkCancellation()
+        process(item)
+    }
+    return "Done"
+}
+
+// Request user confirmation before destructive actions
+func perform(context: HandlerContext) async throws -> String {
+    let schema = ElicitationSchema(
+        properties: ["confirm": .boolean(description: "Delete these files?")],
+        required: ["confirm"]
+    )
+    let result = try await context.elicit(message: "Confirm deletion", requestedSchema: schema)
+    guard result.action == .accept else {
+        return "Cancelled"
+    }
+    // proceed with deletion...
+}
+
+// Request LLM completion during tool execution
+func perform(context: HandlerContext) async throws -> String {
+    let result = try await context.createMessage(
+        messages: [.init(role: .user, content: .text("Summarize: \(data)"))],
+        maxTokens: 200
+    )
+    return "Summary: \(result.content)"
+}
+```
+
 ## Tool Annotations
 
 Provide hints about tool behavior to help clients make decisions:
@@ -334,7 +382,7 @@ struct DeleteFile {
     @Parameter(description: "Path to delete")
     var path: String
 
-    func perform(context: HandlerContext) async throws -> String {
+    func perform() async throws -> String {
         // ...
     }
 }
@@ -373,7 +421,7 @@ Tool results support multiple content types. Return a `String` for simple text, 
 ### Text
 
 ```swift
-func perform(context: HandlerContext) async throws -> String {
+func perform() async throws -> String {
     "Hello, world!"
 }
 ```
@@ -383,7 +431,7 @@ func perform(context: HandlerContext) async throws -> String {
 Return `CallTool.Result` for complex responses:
 
 ```swift
-func perform(context: HandlerContext) async throws -> CallTool.Result {
+func perform() async throws -> CallTool.Result {
     CallTool.Result(content: [
         .text("Here's the chart:"),
         .image(data: chartData, mimeType: "image/png")
@@ -414,7 +462,7 @@ Throw ``MCPError`` for issues with the request itself (unknown tool, malformed r
 Return `isError: true` for errors during execution that the model might recover from:
 
 ```swift
-func perform(context: HandlerContext) async throws -> CallTool.Result {
+func perform() async throws -> CallTool.Result {
     guard isValidDate(date) else {
         return CallTool.Result(
             content: [.text("Invalid date: must be in the future")],
@@ -440,14 +488,14 @@ struct WeatherData: Sendable {
 }
 
 @Tool
-struct GetWeather {
-    static let name = "get_weather"
+struct GetWeatherData {
+    static let name = "get_weather_data"
     static let description = "Get weather data"
 
     @Parameter(description: "City name")
     var location: String
 
-    func perform(context: HandlerContext) async throws -> WeatherData {
+    func perform() async throws -> WeatherData {
         WeatherData(
             temperature: 22.5,
             conditions: "Partly cloudy",

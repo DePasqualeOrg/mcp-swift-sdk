@@ -264,6 +264,38 @@ struct StrictTool {
     }
 }
 
+/// Tool with perform() that doesn't require HandlerContext
+@Tool
+struct SimplePerformTool {
+    static let name = "simple_perform"
+    static let description = "A tool that doesn't need context"
+
+    @Parameter(description: "Input value")
+    var value: String
+
+    func perform() async throws -> String {
+        "Processed: \(value)"
+    }
+}
+
+/// Tool with perform() that returns structured output
+@Tool
+struct SimplePerformStructuredTool {
+    static let name = "simple_perform_structured"
+    static let description = "A tool with structured output"
+
+    @Parameter(description: "Search term")
+    var term: String
+
+    func perform() async throws -> SearchResult {
+        SearchResult(
+            query: term,
+            totalCount: 5,
+            items: ["a", "b", "c"]
+        )
+    }
+}
+
 /// Tool with nested array parameter
 @Tool
 struct MatrixTool {
@@ -292,6 +324,13 @@ struct ToolSpecConformanceTests {
         let _: any ToolSpec.Type = CalculatorTool.self
         let _: any ToolSpec.Type = GreetTool.self
         let _: any ToolSpec.Type = PaginatedListTool.self
+    }
+
+    @Test("Tool with perform() generates ToolSpec conformance")
+    func simplePerformToolGeneratesConformance() {
+        // Verify that tools with perform() (no context) also conform to ToolSpec
+        let _: any ToolSpec.Type = SimplePerformTool.self
+        let _: any ToolSpec.Type = SimplePerformStructuredTool.self
     }
 
     @Test("toolDefinition contains correct name and description")
@@ -753,6 +792,29 @@ struct ToolExecutionTests {
 
         let result = try await tool.perform(context: context)
         #expect(result == "Created task 'Important task' with priority: critical")
+    }
+
+    @Test("Tool with perform() returns expected output")
+    func simplePerformToolExecution() async throws {
+        let args: [String: Value] = ["value": .string("test input")]
+        let tool = try SimplePerformTool.parse(from: args)
+        let context = createMockContext()
+
+        // Tools with perform() should work with the bridging perform(context:)
+        let result = try await tool.perform(context: context)
+        #expect(result == "Processed: test input")
+    }
+
+    @Test("Tool with perform() and structured output")
+    func simplePerformStructuredToolExecution() async throws {
+        let args: [String: Value] = ["term": .string("search term")]
+        let tool = try SimplePerformStructuredTool.parse(from: args)
+        let context = createMockContext()
+
+        let result = try await tool.perform(context: context)
+        #expect(result.query == "search term")
+        #expect(result.totalCount == 5)
+        #expect(result.items == ["a", "b", "c"])
     }
 }
 
