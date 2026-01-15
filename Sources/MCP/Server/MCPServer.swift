@@ -352,8 +352,9 @@ public actor MCPServer {
 ///
 /// - **Protocol errors** (unknown tool, malformed request) are returned as JSON-RPC errors.
 ///
-/// Note: The TypeScript SDK incorrectly throws protocol errors for input validation failures.
-/// This Swift SDK and the Python SDK correctly return `isError: true` per the MCP spec.
+/// Note: The TypeScript SDK returns `isError: true` for unknown tools instead of a
+/// JSON-RPC protocol error. This Swift SDK and the Python SDK correctly return a
+/// protocol error per the MCP spec.
 ///
 /// ## Providing Actionable Error Messages
 ///

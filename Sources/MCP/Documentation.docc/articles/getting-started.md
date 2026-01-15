@@ -11,7 +11,7 @@ For other transports like stdio and HTTP, see the <doc:client-guide> and <doc:se
 ```swift
 import MCP
 
-// Define a tool using the @Tool macro
+// Define a tool
 @Tool
 struct Greet {
     static let name = "greet"
@@ -25,7 +25,7 @@ struct Greet {
     }
 }
 
-// Create the server with the high-level API
+// Create the server
 let server = MCPServer(name: "MyServer", version: "1.0.0")
 
 // Register tools
@@ -36,7 +36,7 @@ try await server.register {
 // Create the client
 let client = Client(name: "MyApp", version: "1.0.0")
 
-// Create a connected transport pair
+// Create the transports
 let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
 
 // Start the server and connect the client
@@ -72,4 +72,3 @@ await server.close()
 - <doc:client-guide>: Build MCP clients
 - <doc:server-guide>: Build MCP servers
 - <doc:transports>: Available transport options
-- <doc:server-advanced>: Low-level APIs for advanced use cases

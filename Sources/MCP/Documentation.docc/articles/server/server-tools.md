@@ -457,7 +457,7 @@ Errors during tool execution are returned with `isError: true`, providing action
 
 ### Simple Errors
 
-For simple error messages, just throw from your `perform` method:
+For simple error messages, throw from your `perform` method:
 
 ```swift
 func perform() async throws -> String {
@@ -467,6 +467,29 @@ func perform() async throws -> String {
     return "Event created"
 }
 ```
+
+You can throw any `Error` type. For clear, actionable error messages, use types conforming to `LocalizedError`:
+
+```swift
+enum MyToolError: LocalizedError {
+    case invalidDate(String)
+    case resourceNotFound(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidDate(let date):
+            return "Invalid date '\(date)': must be in the future"
+        case .resourceNotFound(let path):
+            return "Resource not found: \(path)"
+        }
+    }
+}
+
+// In your tool:
+throw MyToolError.invalidDate(date)
+```
+
+Errors conforming to `LocalizedError` use their `errorDescription` for the message. Other errors fall back to `String(describing:)`, which produces output like `notFound("file.txt")`. For clear, actionable messages that help LLMs self-correct, use `LocalizedError`.
 
 Thrown errors are caught and returned as `CallTool.Result(content: [.text(errorMessage)], isError: true)`.
 
