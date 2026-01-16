@@ -126,14 +126,12 @@ struct ConformanceClient {
         let transport = HTTPClientTransport(endpoint: serverURL, streaming: true)
         let client = Client(name: "swift-conformance-client", version: "1.0.0")
 
-        // Enable elicitation capability with applyDefaults
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: .init(form: .init(applyDefaults: true))
-        ))
-
         // Set up elicitation handler before connecting
         // When applyDefaults: true, client must fill in default values from schema
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(
+            formMode: .enabled(applyDefaults: true),
+            urlMode: .enabled
+        ) { params, _ in
             switch params {
             case .form(let formParams):
                 logger.info("Received elicitation request: \(formParams.message)")

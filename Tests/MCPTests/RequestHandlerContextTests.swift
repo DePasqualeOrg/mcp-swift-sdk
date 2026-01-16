@@ -444,10 +444,6 @@ struct ServerRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { params, _ in
             guard case .form(let formParams) = params else {
                 return ElicitResult(action: .decline)
@@ -504,10 +500,6 @@ struct ServerRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             return ElicitResult(action: .decline)
         }
@@ -835,10 +827,6 @@ struct ClientRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, context in
             // Client handler accesses context.requestId
             await tracker.set(context.requestId)
@@ -897,10 +885,6 @@ struct ClientRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, context in
             // Client handler accesses context.taskId - convenience property matching server context
             await tracker.set(context.taskId)
@@ -957,11 +941,8 @@ struct ClientRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
 
-        await client.withElicitationHandler { _, context in
+        await client.withElicitationHandler(formMode: .enabled()) { _, context in
             await tracker.set(context.taskId)
             return ElicitResult(action: .accept, content: ["x": .string("test")])
         }
@@ -1012,11 +993,8 @@ struct ClientRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
 
-        await client.withElicitationHandler { _, context in
+        await client.withElicitationHandler(formMode: .enabled()) { _, context in
             // Client handler accesses context._meta
             await tracker.set(context._meta)
             return ElicitResult(action: .accept, content: ["x": .string("test")])
@@ -1079,11 +1057,8 @@ struct AdditionalRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
 
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, _ in
             guard case .url(let urlParams) = params else {
                 return ElicitResult(action: .decline)
             }
@@ -1140,11 +1115,8 @@ struct AdditionalRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
 
-        await client.withElicitationHandler { _, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { _, _ in
             return ElicitResult(action: .decline)
         }
 
@@ -1198,11 +1170,8 @@ struct AdditionalRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
 
-        await client.withElicitationHandler { _, _ in
+        await client.withElicitationHandler(formMode: .enabled()) { _, _ in
             return ElicitResult(action: .cancel)
         }
 
@@ -1287,9 +1256,6 @@ struct AdditionalRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
 
         actor RequestCounter {
             var count = 0
@@ -1297,7 +1263,7 @@ struct AdditionalRequestHandlerContextTests {
         }
         let counter = RequestCounter()
 
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: .enabled()) { params, _ in
             await counter.increment()
             guard case .form(let formParams) = params else {
                 return ElicitResult(action: .decline)
@@ -1366,7 +1332,6 @@ struct AdditionalRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(sampling: .init()))
 
         await client.withSamplingHandler { _, context in
             // Sampling handler accesses context.requestId
@@ -1424,7 +1389,6 @@ struct AdditionalRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(sampling: .init()))
 
         await client.withSamplingHandler { _, context in
             // Sampling handler accesses context._meta
@@ -1481,10 +1445,9 @@ struct AdditionalRequestHandlerContextTests {
         }
 
         let client = Client(name: "TestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(roots: .init(listChanged: true)))
 
         // Use withRootsHandler with context parameter
-        await client.withRootsHandler { context in
+        await client.withRootsHandler(listChanged: true) { context in
             // Roots handler accesses context.requestId
             await tracker.set(context.requestId)
             return [Root(uri: "file:///test/path", name: "Test Root")]

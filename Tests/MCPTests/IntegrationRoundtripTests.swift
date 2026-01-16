@@ -582,17 +582,12 @@ struct IntegrationRoundtripTests {
 
         let client = Client(name: "SamplingTestClient", version: "1.0.0")
 
-        // Set client capabilities
-        await client.setCapabilities(Client.Capabilities(
-            sampling: Client.Capabilities.Sampling()
-        ))
-
         // Set up sampling callback that simulates LLM response
-        await client.withRequestHandler(CreateSamplingMessage.self) { [samplingCallbackInvoked] params, _ in
+        await client.withSamplingHandler { [samplingCallbackInvoked] params, _ in
             await samplingCallbackInvoked.record(params: params)
 
             // Return simulated LLM response
-            return CreateSamplingMessage.Result(
+            return ClientSamplingRequest.Result(
                 model: "test-model",
                 stopReason: .endTurn,
                 role: .assistant,
@@ -718,13 +713,8 @@ struct IntegrationRoundtripTests {
 
         let client = Client(name: "ElicitationTestClient", version: "1.0.0")
 
-        // Set client capabilities
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
-        // Set up elicitation callback
-        await client.withElicitationHandler { [elicitationCallbackInvoked] params, _ in
+        // Set up elicitation callback with form mode
+        await client.withElicitationHandler(formMode: .enabled()) { [elicitationCallbackInvoked] params, _ in
             await elicitationCallbackInvoked.record(params: params)
 
             // Simulate user accepting and providing alternative date
@@ -1170,9 +1160,9 @@ private actor ClientProgressUpdates {
 
 /// Tracks sampling callback invocations.
 private actor SamplingCallbackTracker {
-    var invocations: [CreateSamplingMessage.Parameters] = []
+    var invocations: [ClientSamplingRequest.Parameters] = []
 
-    func record(params: CreateSamplingMessage.Parameters) {
+    func record(params: ClientSamplingRequest.Parameters) {
         invocations.append(params)
     }
 }

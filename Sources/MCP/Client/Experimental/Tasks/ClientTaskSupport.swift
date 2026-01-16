@@ -180,9 +180,7 @@ extension Client {
     /// - Important: This is an experimental API that may change without notice.
     ///
     /// - Parameter taskSupport: The client task support configuration
-    /// - Returns: Self for chaining
-    @discardableResult
-    public func enableTaskHandlers(_ taskSupport: ClientTaskSupport) -> Self {
+    public func enableTaskHandlers(_ taskSupport: ClientTaskSupport) {
         let handlers = taskSupport.handlers
 
         // Update capabilities based on handlers
@@ -225,7 +223,5 @@ extension Client {
         if let taskAugmentedElicitation = handlers.taskAugmentedElicitation {
             _setTaskAugmentedElicitationHandler(taskAugmentedElicitation)
         }
-
-        return self
     }
 }

@@ -105,24 +105,66 @@ See <doc:transports> for all available transport options.
 
 ## Client Capabilities
 
-Before connecting, you can configure what capabilities your client advertises to servers. This determines what server-to-client requests your client can handle:
+Client capabilities are automatically detected from the handlers you register. Simply register handlers before connecting, and the client will advertise the appropriate capabilities:
 
 ```swift
 let client = Client(name: "MyApp", version: "1.0.0")
 
-await client.setCapabilities(Client.Capabilities(
-    // Enable sampling requests from server
-    sampling: .init(context: .init(), tools: .init()),
-    // Enable elicitation (user input requests)
-    elicitation: .init(form: .init(applyDefaults: true), url: .init()),
-    // Enable roots (filesystem location sharing)
-    roots: .init(listChanged: true)
-))
+// Enable sampling with tool support
+await client.withSamplingHandler(supportsTools: true) { params, context in
+    // Handle LLM completion requests
+    return try await yourLLMService.complete(params)
+}
+
+// Enable elicitation with form and URL modes
+await client.withElicitationHandler(formMode: .enabled(), urlMode: .enabled) { params, context in
+    // Handle user input requests
+    return try await handleUserInput(params)
+}
+
+// Enable roots with change notifications
+await client.withRootsHandler(listChanged: true) { context in
+    // Return available filesystem roots
+    return [Root(uri: "file:///path/to/project", name: "Project")]
+}
 
 try await client.connect(transport: transport)
 ```
 
-> Important: You must register handlers for any capabilities you advertise. See <doc:client-sampling>, <doc:client-elicitation>, and <doc:client-roots>.
+> Important: Register handlers before calling `connect()`. Attempting to register handlers after connecting will result in an error.
+
+See <doc:client-sampling>, <doc:client-elicitation>, and <doc:client-roots> for detailed handler documentation.
+
+### Explicit Capability Override
+
+For edge cases, you can provide explicit capability overrides via the initializer. This is useful for:
+
+- Testing with specific capability configurations
+- Forward compatibility with capabilities not yet supported by SDK handler registration
+- Advertising `experimental` capabilities (which cannot be auto-detected)
+
+```swift
+let client = Client(
+    name: "MyApp",
+    version: "1.0.0",
+    capabilities: Client.Capabilities(
+        // Explicit sampling override
+        sampling: .init(context: .init(), tools: .init()),
+        // Experimental capabilities (cannot be auto-detected)
+        experimental: ["customFeature": ["enabled": .bool(true)]]
+        // roots: nil — will be auto-detected from handler
+    )
+)
+
+// Auto-detect roots capability from handler
+await client.withRootsHandler { context in
+    return await workspace.getCurrentRoots()
+}
+
+try await client.connect(transport: transport)
+```
+
+Explicit overrides take precedence over auto-detection on a per-capability basis. Only non-nil fields in the initializer override auto-detection; others are still auto-detected from handlers.
 
 ## Configuration Options
 

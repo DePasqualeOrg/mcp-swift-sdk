@@ -10,33 +10,49 @@ There are two modes of elicitation:
 - **Form mode**: Display a form with fields defined by a schema
 - **URL mode**: Direct the user to an external URL (e.g., OAuth flow)
 
-## Declaring Elicitation Capability
+## Registering an Elicitation Handler
 
-Before handling elicitation requests, declare the capability when setting up your client:
+Use ``Client/withElicitationHandler(formMode:urlMode:handler:)`` to register a handler. The elicitation capability is automatically advertised when you register a handler:
 
 ```swift
 let client = Client(name: "MyApp", version: "1.0.0")
 
-await client.setCapabilities(Client.Capabilities(
-    elicitation: .init(
-        form: .init(applyDefaults: true),  // Support form mode
-        url: .init()                        // Support URL mode
-    )
-))
-```
-
-## Registering an Elicitation Handler
-
-Use ``Client/withElicitationHandler(_:)`` to register a handler:
-
-```swift
-client.withElicitationHandler { params, context in
+// Enable both form and URL modes
+await client.withElicitationHandler(
+    formMode: .enabled(applyDefaults: true),  // Support form mode with defaults
+    urlMode: .enabled                          // Support URL mode
+) { params, context in
     switch params {
     case .form(let formParams):
         return try await handleFormElicitation(formParams)
     case .url(let urlParams):
         return try await handleURLElicitation(urlParams)
     }
+}
+
+try await client.connect(transport: transport)
+```
+
+> Important: Register handlers before calling `connect()`. Attempting to register handlers after connecting will result in an error.
+
+### Mode Configuration
+
+You can enable specific modes:
+
+```swift
+// Form mode only
+await client.withElicitationHandler(formMode: .enabled(), urlMode: nil) { params, _ in
+    // Only .form cases will be received
+}
+
+// URL mode only
+await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, _ in
+    // Only .url cases will be received
+}
+
+// Both modes (default when using .enabled())
+await client.withElicitationHandler(formMode: .enabled(), urlMode: .enabled) { params, _ in
+    // Both .form and .url cases can be received
 }
 ```
 

@@ -1651,11 +1651,15 @@ struct ServerSamplingCapabilityValidationTests {
         )
 
         // Set up client without sampling.tools capability (just basic sampling)
+        // supportsTools defaults to false, so this client won't have tools capability
         let client = Client(
             name: "TestClient",
             version: "1.0"
         )
-        await client.setCapabilities(Client.Capabilities(sampling: .init()))
+        await client.withSamplingHandler { _, _ in
+            // This handler won't be called in this test
+            fatalError("Should not be called")
+        }
 
         // Connect via in-memory transport
         let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
@@ -1735,13 +1739,11 @@ struct ServerSamplingCapabilityValidationTests {
         )
 
         // Set up client WITH sampling capability
+        // Handler registration auto-detects capability
         let client = Client(
             name: "TestClient",
             version: "1.0"
         )
-        await client.setCapabilities(Client.Capabilities(sampling: .init()))
-
-        // Set up client sampling handler
         await client.withSamplingHandler { _, _ in
             return ClientSamplingRequest.Result(
                 model: "test-model",
@@ -1794,10 +1796,9 @@ struct ServerSamplingCapabilityValidationTests {
             name: "TestClient",
             version: "1.0"
         )
-        await client.setCapabilities(Client.Capabilities(sampling: .init(tools: .init())))
 
-        // Set up client sampling handler
-        await client.withSamplingHandler { _, _ in
+        // Set up client sampling handler with tools support
+        await client.withSamplingHandler(supportsTools: true) { _, _ in
             return ClientSamplingRequest.Result(
                 model: "test-model",
                 stopReason: .toolUse,

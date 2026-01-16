@@ -17,27 +17,30 @@ Client implementations should include human oversight for sampling requests:
 
 This ensures users maintain control over AI interactions initiated by servers.
 
-## Declaring Sampling Capability
+## Registering a Sampling Handler
 
-Before you can handle sampling requests, declare the sampling capability when setting up your client:
+Use ``Client/withSamplingHandler(supportsContext:supportsTools:handler:)`` to register a handler for sampling requests. The sampling capability is automatically advertised when you register a handler:
 
 ```swift
 let client = Client(name: "MyApp", version: "1.0.0")
 
-await client.setCapabilities(Client.Capabilities(
-    sampling: .init(
-        context: .init(),  // Support includeContext parameter
-        tools: .init()     // Support tools in sampling requests
-    )
-))
+// Register with sub-capabilities
+await client.withSamplingHandler(
+    supportsContext: true,  // Support includeContext parameter
+    supportsTools: true     // Support tools in sampling requests
+) { params, context in
+    // Handle the request...
+}
+
+try await client.connect(transport: transport)
 ```
 
-## Registering a Sampling Handler
+> Important: Register handlers before calling `connect()`. Attempting to register handlers after connecting will result in an error.
 
-Use ``Client/withSamplingHandler(_:)`` to register a handler for sampling requests:
+### Basic Handler
 
 ```swift
-client.withSamplingHandler { params, context in
+await client.withSamplingHandler { params, context in
     // params contains the request parameters
     // context provides cancellation checking and progress reporting
 
@@ -75,7 +78,7 @@ The handler receives ``ClientSamplingParameters`` with:
 Check if tools are included:
 
 ```swift
-client.withSamplingHandler { params, context in
+await client.withSamplingHandler { params, context in
     if params.hasTools {
         // Handle with tool support
         return try await handleWithTools(params)
@@ -142,7 +145,7 @@ return ClientSamplingRequest.Result(
 Check for cancellation during long operations:
 
 ```swift
-client.withSamplingHandler { params, context in
+await client.withSamplingHandler { params, context in
     // Check if cancelled before expensive operations
     try context.checkCancellation()
 
@@ -162,7 +165,7 @@ client.withSamplingHandler { params, context in
 Report progress back to the server:
 
 ```swift
-client.withSamplingHandler { params, context in
+await client.withSamplingHandler { params, context in
     if let token = context._meta?.progressToken {
         try await context.sendProgressNotification(
             token: token,

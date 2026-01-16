@@ -491,11 +491,16 @@ struct CapabilityNegotiationTests {
             version: "1.0.0"
         )
 
-        // Set capabilities before connecting
-        await client.setCapabilities(.init(
-            sampling: .init(tools: .init()),
-            roots: .init(listChanged: true)
-        ))
+        // Set capabilities via handlers before connecting
+        await client.withSamplingHandler(supportsTools: true) { _, _ in
+            ClientSamplingRequest.Result(
+                model: "test",
+                stopReason: .endTurn,
+                role: .assistant,
+                content: []
+            )
+        }
+        await client.withRootsHandler(listChanged: true) { _ in [] }
 
         // Connect and verify
         try await client.connect(transport: clientTransport)

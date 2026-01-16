@@ -495,10 +495,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { params, _ in
             guard case .form(let formParams) = params else {
                 return ElicitResult(action: .decline)
@@ -552,10 +548,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             return ElicitResult(action: .decline)
         }
@@ -604,10 +596,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             return ElicitResult(action: .cancel)
         }
@@ -669,10 +657,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             return ElicitResult(
                 action: .accept,
@@ -733,11 +717,7 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
-
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, _ in
             guard case .url(let urlParams) = params else {
                 return ElicitResult(action: .decline)
             }
@@ -791,11 +771,7 @@ struct ElicitationIntegrationTests {
 
         // Client only supports URL mode, not form
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
-
-        await client.withElicitationHandler { _, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { _, _ in
             Issue.record("Handler should not be called")
             return ElicitResult(action: .decline)
         }
@@ -841,10 +817,6 @@ struct ElicitationIntegrationTests {
 
         // Client only supports form mode, not URL
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             Issue.record("Handler should not be called")
             return ElicitResult(action: .decline)
@@ -950,9 +922,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
 
         actor Counter {
             var count = 0
@@ -961,7 +930,7 @@ struct ElicitationIntegrationTests {
         }
         let counter = Counter()
 
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: .enabled()) { params, _ in
             await counter.increment()
             guard case .form(let formParams) = params else {
                 return ElicitResult(action: .decline)
@@ -1033,10 +1002,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { params, _ in
             guard case .form(let formParams) = params else {
                 return ElicitResult(action: .decline)
@@ -1105,10 +1070,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             return ElicitResult(action: .accept, content: ["interests": .strings(["tech", "music"])])
         }
@@ -1158,11 +1119,7 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
-
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, _ in
             guard case .url(let urlParams) = params else {
                 return ElicitResult(action: .cancel)
             }
@@ -1213,11 +1170,7 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
-
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, _ in
             guard case .url = params else {
                 return ElicitResult(action: .decline)
             }
@@ -1265,11 +1218,7 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
-
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, _ in
             guard case .url = params else {
                 return ElicitResult(action: .decline)
             }
@@ -1332,10 +1281,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { params, _ in
             guard case .form(let formParams) = params else {
                 return ElicitResult(action: .decline)
@@ -1418,10 +1363,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             return ElicitResult(
                 action: .accept,
@@ -1490,10 +1431,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             // Only provide the required field
             return ElicitResult(action: .accept, content: ["name": .string("Jane Smith")])
@@ -1590,10 +1527,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { params, _ in
             // Verify the schema contains default values
             guard case .form(let formParams) = params else {
@@ -1679,10 +1612,6 @@ struct ElicitationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(form: Client.Capabilities.Elicitation.Form())
-        ))
-
         await client.withElicitationHandler { _, _ in
             return ElicitResult(
                 action: .accept,
@@ -2214,13 +2143,14 @@ struct ElicitationCompleteNotificationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
 
         // Set up notification handler
         await client.onNotification(ElicitationCompleteNotification.self) { [notificationState] message in
             await notificationState.markReceived(elicitationId: message.params.elicitationId)
+        }
+
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { _, _ in
+            return ElicitResult(action: .accept)
         }
 
         try await server.start(transport: serverTransport)
@@ -2283,11 +2213,7 @@ struct ElicitationCompleteNotificationIntegrationTests {
         }
 
         let client = Client(name: "ElicitTestClient", version: "1.0.0")
-        await client.setCapabilities(Client.Capabilities(
-            elicitation: Client.Capabilities.Elicitation(url: Client.Capabilities.Elicitation.URL())
-        ))
-
-        await client.withElicitationHandler { params, _ in
+        await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, _ in
             guard case .url(let urlParams) = params else {
                 return ElicitResult(action: .decline)
             }

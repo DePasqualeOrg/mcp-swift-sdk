@@ -5,6 +5,24 @@ import struct Foundation.Date
 import class Foundation.JSONDecoder
 import class Foundation.JSONEncoder
 
+/// Configuration for form-mode elicitation support.
+public enum FormModeConfig: Sendable, Hashable {
+    /// Enable form-mode elicitation.
+    ///
+    /// - Parameter applyDefaults: When `true`, the client applies default values from the
+    ///   JSON Schema to any missing fields in the user's response before returning it to the
+    ///   server. When `false` (default), missing fields are returned as-is, and the server
+    ///   is responsible for applying defaults. Set to `true` if your UI framework automatically
+    ///   populates form fields with schema defaults.
+    case enabled(applyDefaults: Bool = false)
+}
+
+/// Configuration for URL-mode elicitation support.
+public enum URLModeConfig: Sendable, Hashable {
+    /// Enable URL-mode elicitation (for OAuth flows, etc.).
+    case enabled
+}
+
 /// Model Context Protocol client
 public actor Client {
     /// The client configuration
@@ -228,7 +246,7 @@ public actor Client {
         /// ## Example
         ///
         /// ```swift
-        /// client.withElicitationHandler { params, context in
+        /// await client.withElicitationHandler { params, context in
         ///     if let taskId = context.taskId {
         ///         print("Handling elicitation for task: \(taskId)")
         ///     }
@@ -377,6 +395,41 @@ public actor Client {
         ExperimentalClientTaskHandlers.TaskAugmentedElicitationHandler?
     /// The task for the message handling loop
     var task: Task<Void, Never>?
+
+    // MARK: - Capability Auto-Detection State
+
+    /// Configuration for sampling handler, used to build capabilities at connect time.
+    struct SamplingConfig: Sendable {
+        var supportsContext: Bool
+        var supportsTools: Bool
+    }
+
+    /// Configuration for elicitation handler, used to build capabilities at connect time.
+    struct ElicitationConfig: Sendable {
+        var formMode: FormModeConfig?
+        var urlMode: URLModeConfig?
+    }
+
+    /// Configuration for roots handler, used to build capabilities at connect time.
+    struct RootsConfig: Sendable {
+        var listChanged: Bool
+    }
+
+    /// Sampling handler configuration (set when handler is registered).
+    var samplingConfig: SamplingConfig?
+    /// Elicitation handler configuration (set when handler is registered).
+    var elicitationConfig: ElicitationConfig?
+    /// Roots handler configuration (set when handler is registered).
+    var rootsConfig: RootsConfig?
+    /// Tasks capability configuration (set via withTasksCapability).
+    var tasksConfig: Capabilities.Tasks?
+
+    /// Explicit capability overrides from initializer.
+    /// Only non-nil fields override auto-detection.
+    let explicitCapabilities: Capabilities?
+
+    /// Whether the client is connected. Used to prevent handler registration after connect.
+    var isConnected: Bool = false
 
     /// In-flight server request handler Tasks, tracked by request ID.
     /// Used for protocol-level cancellation when CancelledNotification is received.
@@ -567,6 +620,20 @@ public actor Client {
         }
     }
 
+    /// Initialize a new MCP client.
+    ///
+    /// - Parameters:
+    ///   - name: The client name.
+    ///   - version: The client version.
+    ///   - title: A human-readable title for the client, intended for UI display.
+    ///   - description: An optional human-readable description.
+    ///   - icons: Optional icons representing this client.
+    ///   - websiteUrl: An optional URL for the client's website.
+    ///   - capabilities: Optional explicit capability overrides. Only non-nil fields override
+    ///     auto-detection from handler registration. Use this for edge cases like testing,
+    ///     forward compatibility with new capabilities, or advertising `experimental` capabilities.
+    ///   - configuration: The client configuration.
+    ///   - validator: A JSON Schema validator for validating tool outputs.
     public init(
         name: String,
         version: String,
@@ -574,6 +641,7 @@ public actor Client {
         description: String? = nil,
         icons: [Icon]? = nil,
         websiteUrl: String? = nil,
+        capabilities: Capabilities? = nil,
         configuration: Configuration = .default,
         validator: (any JSONSchemaValidator)? = nil
     ) {
@@ -585,19 +653,10 @@ public actor Client {
             icons: icons,
             websiteUrl: websiteUrl
         )
-        self.capabilities = Capabilities()
+        self.explicitCapabilities = capabilities
+        self.capabilities = Capabilities()  // Will be built at connect time
         self.configuration = configuration
         self.validator = validator ?? DefaultJSONSchemaValidator()
-    }
-
-    /// Set the client capabilities.
-    ///
-    /// This should be called before `connect()` to configure what capabilities
-    /// the client will advertise to the server during initialization.
-    ///
-    /// - Parameter capabilities: The capabilities to set.
-    public func setCapabilities(_ capabilities: Capabilities) {
-        self.capabilities = capabilities
     }
 
     /// Returns the server capabilities received during initialization.
@@ -614,9 +673,28 @@ public actor Client {
         return serverCapabilities
     }
 
-    /// Connect to the server using the given transport
+    /// Connect to the server using the given transport.
+    ///
+    /// This method:
+    /// 1. Establishes the transport connection
+    /// 2. Builds capabilities from registered handlers and explicit overrides
+    /// 3. Sends the initialization request to the server
+    /// 4. Validates the server's protocol version
+    ///
+    /// After this method returns, the client is fully initialized and ready to make requests.
+    ///
+    /// - Parameter transport: The transport to use for communication.
+    /// - Returns: The server's initialization response containing capabilities and server info.
+    /// - Throws: `MCPError` if connection or initialization fails.
     @discardableResult
     public func connect(transport: any Transport) async throws -> Initialize.Result {
+        // Build capabilities from handlers and explicit overrides
+        self.capabilities = buildCapabilities()
+        await validateCapabilities(capabilities)
+
+        // Mark as connected to prevent further handler registration
+        self.isConnected = true
+
         self.connection = transport
         try await self.connection?.connect()
 
@@ -810,6 +888,89 @@ public actor Client {
             )
         }
         // Per spec: MAY ignore if request is unknown - no error needed
+    }
+
+    // MARK: - Capability Building
+
+    /// Build capabilities from explicit overrides and handler registrations.
+    ///
+    /// Explicit overrides (from initializer) take precedence over auto-detection
+    /// on a per-capability basis. Only non-nil explicit capabilities override;
+    /// others are auto-detected from registered handlers.
+    private func buildCapabilities() -> Capabilities {
+        var capabilities = Capabilities()
+
+        // Sampling: explicit override (from initializer) OR auto-detect from handler
+        if let explicit = explicitCapabilities?.sampling {
+            capabilities.sampling = explicit
+        } else if let config = samplingConfig {
+            capabilities.sampling = .init(
+                context: config.supportsContext ? .init() : nil,
+                tools: config.supportsTools ? .init() : nil
+            )
+        }
+
+        // Elicitation: explicit override OR auto-detect from handler
+        // Note: Always emit canonical form `{ form: {} }` not empty `{}` when form mode is enabled.
+        // Per spec: "For backwards compatibility, an empty capabilities object is equivalent to
+        // declaring support for form mode only." We emit the explicit form for clarity.
+        if let explicit = explicitCapabilities?.elicitation {
+            capabilities.elicitation = explicit
+        } else if let config = elicitationConfig {
+            capabilities.elicitation = .init(
+                form: config.formMode.map { mode in
+                    switch mode {
+                    case .enabled(let applyDefaults):
+                        return .init(applyDefaults: applyDefaults ? true : nil)
+                    }
+                },
+                url: config.urlMode.map { _ in .init() }
+            )
+        }
+
+        // Roots: explicit override OR auto-detect from handler
+        if let explicit = explicitCapabilities?.roots {
+            capabilities.roots = explicit
+        } else if let config = rootsConfig {
+            capabilities.roots = .init(listChanged: config.listChanged ? true : nil)
+        }
+
+        // Tasks: explicit override OR auto-detect from config
+        if let explicit = explicitCapabilities?.tasks {
+            capabilities.tasks = explicit
+        } else if let config = tasksConfig {
+            capabilities.tasks = config
+        }
+
+        // Experimental: always from initializer (cannot auto-detect arbitrary capabilities)
+        capabilities.experimental = explicitCapabilities?.experimental
+
+        return capabilities
+    }
+
+    /// Validate capabilities configuration and log warnings for mismatches.
+    ///
+    /// These are intentionally warnings (not errors) to support legitimate edge cases:
+    /// - Testing: advertise capabilities to test server behavior without implementing handlers
+    /// - Forward compatibility: explicit overrides may advertise capabilities not yet supported
+    /// - Gradual migration: configure capabilities before handlers are fully implemented
+    private func validateCapabilities(_ capabilities: Capabilities) async {
+        // Check for capabilities advertised without handlers
+        if capabilities.sampling != nil && requestHandlers[ClientSamplingRequest.name] == nil {
+            await logger?.warning(
+                "Sampling capability will be advertised but no handler is registered"
+            )
+        }
+        if capabilities.elicitation != nil && requestHandlers[Elicit.name] == nil {
+            await logger?.warning(
+                "Elicitation capability will be advertised but no handler is registered"
+            )
+        }
+        if capabilities.roots != nil && requestHandlers[ListRoots.name] == nil {
+            await logger?.warning(
+                "Roots capability will be advertised but no handler is registered"
+            )
+        }
     }
 
     // MARK: - Lifecycle

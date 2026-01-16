@@ -15,39 +15,47 @@ Client implementations should:
 - Validate root accessibility before exposing them
 - Only expose roots with appropriate permissions
 
-## Declaring Roots Capability
+## Registering a Roots Handler
 
-Before providing roots, declare the capability when setting up your client:
+Use ``Client/withRootsHandler(listChanged:handler:)`` to register a handler that returns available roots. The roots capability is automatically advertised when you register a handler:
 
 ```swift
 let client = Client(name: "MyApp", version: "1.0.0")
 
-await client.setCapabilities(Client.Capabilities(
-    roots: .init(listChanged: true)  // Enable roots with change notifications
-))
-```
-
-Setting `listChanged: true` indicates that your client will notify the server when roots change.
-
-## Registering a Roots Handler
-
-Use ``Client/withRootsHandler(_:)`` to register a handler that returns available roots:
-
-```swift
-client.withRootsHandler { context in
+// Enable roots with change notifications
+await client.withRootsHandler(listChanged: true) { context in
     [
         Root(uri: "file:///Users/john/projects", name: "Projects"),
         Root(uri: "file:///Users/john/documents", name: "Documents")
     ]
 }
+
+try await client.connect(transport: transport)
 ```
+
+> Important: Register handlers before calling `connect()`. Attempting to register handlers after connecting will result in an error.
+
+Setting `listChanged: true` indicates that your client will notify the server when roots change.
+
+## Static Roots
+
+For clients with a fixed set of roots, use ``Client/withStaticRoots(_:)`` for a simpler API:
+
+```swift
+await client.withStaticRoots([
+    Root(uri: "file:///Users/john/projects", name: "Projects"),
+    Root(uri: "file:///Users/john/documents", name: "Documents")
+])
+```
+
+This registers the roots capability without change notifications.
 
 ### Dynamic Roots
 
 Return different roots based on application state:
 
 ```swift
-client.withRootsHandler { context in
+await client.withRootsHandler { context in
     var roots: [Root] = []
 
     // Add the current workspace

@@ -361,10 +361,8 @@ struct RootsIntegrationTests {
             name: "RootsTestClient",
             version: "1.0"
         )
-        await client.setCapabilities(.init(roots: .init(listChanged: true)))
-
-        // Register roots handler (required since we declared the capability)
-        await client.withRootsHandler { _ in
+        // Handler registration with listChanged auto-detects capability
+        await client.withRootsHandler(listChanged: true) { _ in
             [Root(uri: "file:///test/path")]
         }
 
@@ -424,8 +422,7 @@ struct RootsIntegrationTests {
             name: "RootsTestClient",
             version: "1.0"
         )
-        await client.setCapabilities(.init(roots: .init(listChanged: true)))
-        await client.withRootsHandler { _ in
+        await client.withRootsHandler(listChanged: true) { _ in
             expectedRoots
         }
 
@@ -541,8 +538,7 @@ struct RootsIntegrationTests {
             name: "RootsTestClient",
             version: "1.0"
         )
-        await client.setCapabilities(.init(roots: .init(listChanged: true)))
-        await client.withRootsHandler { _ in
+        await client.withRootsHandler(listChanged: true) { _ in
             [Root(uri: "file:///path")]
         }
 
@@ -602,7 +598,10 @@ struct RootsIntegrationTests {
             name: "RootsTestClient",
             version: "1.0"
         )
-        await client.setCapabilities(.init(roots: .init()))  // No listChanged
+        // Default listChanged is false
+        await client.withRootsHandler { _ in
+            [Root(uri: "file:///test")]
+        }
 
         try await server.start(transport: serverTransport)
         try await client.connect(transport: clientTransport)

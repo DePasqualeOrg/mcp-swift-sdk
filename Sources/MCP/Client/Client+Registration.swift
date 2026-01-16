@@ -3,14 +3,12 @@ import Foundation
 extension Client {
     // MARK: - Handler Registration
 
-    /// Register a handler for a notification
-    @discardableResult
+    /// Register a handler for a notification.
     public func onNotification<N: Notification>(
         _ type: N.Type,
         handler: @escaping @Sendable (Message<N>) async throws -> Void
-    ) -> Self {
+    ) {
         notificationHandlers[N.name, default: []].append(TypedNotificationHandler(handler))
-        return self
     }
 
     /// Send a notification to the server
@@ -101,30 +99,31 @@ extension Client {
     /// - Parameters:
     ///   - type: The method type to handle
     ///   - handler: The handler function that receives parameters and context, returns a result
-    /// - Returns: Self for chaining
-    @discardableResult
     public func withRequestHandler<M: Method>(
         _ type: M.Type,
         handler: @escaping @Sendable (M.Parameters, RequestHandlerContext) async throws -> M.Result
-    ) -> Self {
+    ) {
         requestHandlers[M.name] = TypedClientRequestHandler<M>(handler)
-        return self
     }
 
     /// Register a handler for `roots/list` requests from the server.
     ///
+    /// Automatically advertises the `roots` capability.
+    /// Must be called before `connect()`.
+    ///
     /// When the server requests the list of roots, this handler will be called
     /// to provide the available filesystem directories.
-    ///
-    /// - Important: The client must have declared `roots` capability during initialization.
     ///
     /// ## Example
     ///
     /// ```swift
-    /// client.withRootsHandler { context in
-    ///     // Access request context if needed
-    ///     print("Request ID: \(context.requestId)")
+    /// // Dynamic roots that may change
+    /// await client.withRootsHandler(listChanged: true) { context in
+    ///     return await workspace.getCurrentRoots()
+    /// }
     ///
+    /// // Static roots (consider using withStaticRoots instead)
+    /// await client.withRootsHandler { context in
     ///     return [
     ///         Root(uri: "file:///home/user/project", name: "Project"),
     ///         Root(uri: "file:///home/user/docs", name: "Documents")
@@ -132,43 +131,95 @@ extension Client {
     /// }
     /// ```
     ///
-    /// - Parameter handler: A closure that receives the request context and returns the list of available roots.
-    /// - Returns: Self for chaining.
-    /// - Precondition: `capabilities.roots` must be non-nil.
-    @discardableResult
+    /// - Parameters:
+    ///   - listChanged: Whether the client will send `roots/list_changed` notifications
+    ///     when roots change. Set to `true` if your roots can change during the session
+    ///     and you will call `sendRootsChanged()` to notify the server. Default: `false`.
+    ///   - handler: A closure that receives the request context and returns the list of available roots.
+    /// - Precondition: Must not be called after `connect()`.
     public func withRootsHandler(
-        _ handler: @escaping @Sendable (RequestHandlerContext) async throws -> [Root]
-    ) -> Self {
+        listChanged: Bool = false,
+        handler: @escaping @Sendable (RequestHandlerContext) async throws -> [Root]
+    ) {
         precondition(
-            capabilities.roots != nil,
-            "Cannot register roots handler: Client does not have roots capability"
+            !isConnected,
+            "Cannot register handlers after connect(). Register all handlers before calling connect()."
         )
-        return withRequestHandler(ListRoots.self) { _, context in
+        rootsConfig = RootsConfig(listChanged: listChanged)
+        withRequestHandler(ListRoots.self) { _, context in
             ListRoots.Result(roots: try await handler(context))
         }
     }
 
-    /// Register a handler for `sampling/createMessage` requests from the server.
+    /// Register a static list of roots that never changes.
     ///
-    /// When the server requests a sampling completion, this handler will be called
-    /// to generate the LLM response.
+    /// This is a convenience method for the common case where roots are known at startup
+    /// and don't change during the session. For dynamic roots that may change, use
+    /// `withRootsHandler(listChanged:handler:)` instead.
     ///
-    /// The handler receives parameters that may or may not include tools. Check `params.hasTools`
-    /// to determine if tool use is enabled for this request.
-    ///
-    /// - Important: The client must have declared `sampling` capability during initialization.
+    /// Must be called before `connect()`.
     ///
     /// ## Example
     ///
     /// ```swift
-    /// client.withSamplingHandler { params, context in
+    /// let client = Client(name: "MyClient", version: "1.0")
+    /// await client.withStaticRoots([
+    ///     Root(uri: "file:///home/user/project", name: "Project"),
+    ///     Root(uri: "file:///home/user/docs", name: "Documents")
+    /// ])
+    ///
+    /// try await client.connect(transport: transport)
+    /// ```
+    ///
+    /// - Parameter roots: The fixed list of roots to return for all requests.
+    /// - Precondition: Must not be called after `connect()`.
+    public func withStaticRoots(_ roots: [Root]) {
+        withRootsHandler(listChanged: false) { _ in roots }
+    }
+
+    /// Configure experimental task capabilities.
+    ///
+    /// Automatically advertises the `tasks` capability with the specified configuration.
+    /// Must be called before `connect()`.
+    ///
+    /// The `Tasks` capability controls support for task-augmented requests:
+    /// - `list`: Whether the client supports `tasks/list` requests
+    /// - `cancel`: Whether the client supports `tasks/cancel` requests
+    /// - `requests.sampling.createMessage`: Support for task-augmented sampling
+    /// - `requests.elicitation.create`: Support for task-augmented elicitation
+    ///
+    /// - Note: This is an experimental feature that may change without notice.
+    ///
+    /// - Parameter config: Configuration for task capability support.
+    /// - Precondition: Must not be called after `connect()`.
+    public func withTasksCapability(_ config: Capabilities.Tasks) {
+        precondition(
+            !isConnected,
+            "Cannot register handlers after connect(). Register all handlers before calling connect()."
+        )
+        tasksConfig = config
+    }
+
+    /// Register a handler for `sampling/createMessage` requests from the server.
+    ///
+    /// Automatically advertises the `sampling` capability with the specified sub-capabilities.
+    /// Must be called before `connect()`.
+    ///
+    /// When the server requests a sampling completion, this handler will be called
+    /// to generate the LLM response.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let client = Client(name: "MyClient", version: "1.0")
+    /// await client.withSamplingHandler(supportsTools: true) { params, context in
     ///     // Check for cancellation during long operations
     ///     try context.checkCancellation()
     ///
     ///     // Call your LLM with the messages
     ///     let response = try await llm.complete(
     ///         messages: params.messages,
-    ///         tools: params.tools,  // May be nil
+    ///         tools: params.tools,  // Available when supportsTools is true
     ///         maxTokens: params.maxTokens
     ///     )
     ///
@@ -179,46 +230,95 @@ extension Client {
     ///         content: .text(response.text)
     ///     )
     /// }
+    ///
+    /// try await client.connect(transport: transport)
     /// ```
     ///
-    /// - Parameter handler: A closure that receives sampling parameters and context, returns the result.
-    /// - Returns: Self for chaining.
-    /// - Precondition: `capabilities.sampling` must be non-nil.
-    @discardableResult
+    /// - Parameters:
+    ///   - supportsContext: Whether the client supports `includeContext` parameter values
+    ///     other than "none". When `true`, servers may request context from this or all servers.
+    ///     Default: `false`.
+    ///   - supportsTools: Whether the client supports `tools` and `toolChoice` parameters
+    ///     in sampling requests. When `true`, servers may include tools for the LLM to use.
+    ///     Default: `false`.
+    ///   - handler: A closure that receives sampling parameters and context, returns the result.
+    /// - Precondition: Must not be called after `connect()`.
     public func withSamplingHandler(
-        _ handler: @escaping @Sendable (ClientSamplingRequest.Parameters, RequestHandlerContext) async throws -> ClientSamplingRequest.Result
-    ) -> Self {
+        supportsContext: Bool = false,
+        supportsTools: Bool = false,
+        handler: @escaping @Sendable (ClientSamplingRequest.Parameters, RequestHandlerContext) async throws -> ClientSamplingRequest.Result
+    ) {
         precondition(
-            capabilities.sampling != nil,
-            "Cannot register sampling handler: Client does not have sampling capability"
+            !isConnected,
+            "Cannot register handlers after connect(). Register all handlers before calling connect()."
         )
-        return withRequestHandler(ClientSamplingRequest.self, handler: handler)
+        samplingConfig = SamplingConfig(supportsContext: supportsContext, supportsTools: supportsTools)
+        withRequestHandler(ClientSamplingRequest.self, handler: handler)
     }
 
     /// Register a handler for `elicitation/create` requests from the server.
     ///
+    /// Automatically advertises the `elicitation` capability with the specified mode support.
+    /// Must be called before `connect()`.
+    ///
     /// When the server requests user input via elicitation, this handler will be called
-    /// to collect the input and return the result.
+    /// to collect the input and return the result. The handler receives parameters that
+    /// include the requested mode (`form` or `url`).
     ///
-    /// - Important: The client must have declared `elicitation` capability during initialization.
+    /// ## Example
     ///
-    /// - Parameter handler: A closure that receives elicitation parameters and context, returns the result.
-    /// - Returns: Self for chaining.
-    /// - Precondition: `capabilities.elicitation` must be non-nil.
+    /// ```swift
+    /// // Form mode only (default)
+    /// await client.withElicitationHandler { params, context in
+    ///     guard case .form(let formParams) = params else {
+    ///         return ElicitResult(action: .decline)
+    ///     }
+    ///     let userInput = try await presentForm(formParams.requestedSchema)
+    ///     return ElicitResult(action: .accept, content: userInput)
+    /// }
     ///
-    /// - Note: Unlike the TypeScript SDK, this method does not wrap the handler with
-    ///   additional validation. Swift's type system enforces that the handler returns
-    ///   a valid `Elicit.Result`, and the server validates the response content against
-    ///   `requestedSchema` when it receives the result.
-    @discardableResult
+    /// // Both modes
+    /// await client.withElicitationHandler(
+    ///     formMode: .enabled(applyDefaults: true),
+    ///     urlMode: .enabled
+    /// ) { params, context in
+    ///     switch params {
+    ///     case .form(let formParams):
+    ///         return try await handleFormElicitation(formParams)
+    ///     case .url(let urlParams):
+    ///         return try await handleUrlElicitation(urlParams)
+    ///     }
+    /// }
+    ///
+    /// // URL mode only
+    /// await client.withElicitationHandler(formMode: nil, urlMode: .enabled) { params, context in
+    ///     // Handle OAuth flow
+    /// }
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - formMode: Configuration for form-mode support. Pass `.enabled(applyDefaults:)` to support
+    ///     form elicitation, or `nil` to disable. Default: `.enabled()`.
+    ///   - urlMode: Configuration for URL-mode support (OAuth flows, etc.). Pass `.enabled` to support,
+    ///     or `nil` to disable. Default: `nil`.
+    ///   - handler: A closure that receives elicitation parameters and context, returns the result.
+    /// - Precondition: Must not be called after `connect()`.
+    /// - Precondition: At least one mode must be enabled.
     public func withElicitationHandler(
-        _ handler: @escaping @Sendable (Elicit.Parameters, RequestHandlerContext) async throws -> Elicit.Result
-    ) -> Self {
+        formMode: FormModeConfig? = .enabled(),
+        urlMode: URLModeConfig? = nil,
+        handler: @escaping @Sendable (Elicit.Parameters, RequestHandlerContext) async throws -> Elicit.Result
+    ) {
         precondition(
-            capabilities.elicitation != nil,
-            "Cannot register elicitation handler: Client does not have elicitation capability"
+            !isConnected,
+            "Cannot register handlers after connect(). Register all handlers before calling connect()."
         )
-        return withRequestHandler(Elicit.self, handler: handler)
+        precondition(
+            formMode != nil || urlMode != nil,
+            "At least one elicitation mode (formMode or urlMode) must be enabled."
+        )
+        elicitationConfig = ElicitationConfig(formMode: formMode, urlMode: urlMode)
+        withRequestHandler(Elicit.self, handler: handler)
     }
 
     /// Internal method to set a request handler box directly.

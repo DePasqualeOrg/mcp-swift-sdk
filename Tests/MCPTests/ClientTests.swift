@@ -1034,11 +1034,16 @@ struct ClientTests {
         let transport = MockTransport()
         let client = Client(name: "TestClient", version: "1.0")
 
-        // Set client capabilities with roots and sampling
-        await client.setCapabilities(.init(
-            sampling: .init(),
-            roots: .init(listChanged: true)
-        ))
+        // Set client capabilities via handlers
+        await client.withSamplingHandler { _, _ in
+            ClientSamplingRequest.Result(
+                model: "test",
+                stopReason: .endTurn,
+                role: .assistant,
+                content: []
+            )
+        }
+        await client.withRootsHandler(listChanged: true) { _ in [] }
 
         // Set up a task to handle the initialize response and verify capabilities
         let initTask = Task {
