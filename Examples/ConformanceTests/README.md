@@ -4,40 +4,19 @@ Swift implementations of MCP client and server for running against the official 
 
 ## Server Tests
 
-Tests the MCP Swift SDK server implementation.
-
-**Start the server:**
+Tests the MCP Swift SDK server implementation (27/27 passing).
 
 ```bash
-cd Examples/ConformanceTests
-swift build
-swift run ConformanceServer
+scripts/conformance/server.sh
 ```
-
-**In a separate terminal session, run the tests:**
-
-```bash
-cd Examples/ConformanceTests
-npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp
-```
-
-**Status:** 27/27 passing
 
 ## Client Tests
 
-Tests the MCP Swift SDK client implementation.
+Tests the MCP Swift SDK client implementation (10/10 passing; auth scenarios will be tested after OAuth is implemented).
 
 ```bash
-cd Examples/ConformanceTests
-
-for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
-  npx @modelcontextprotocol/conformance client \
-    --command "swift run ConformanceClient" \
-    --scenario "$scenario"
-done
+scripts/conformance/client.sh
 ```
-
-**Status:** 10/10 passing (auth scenarios will be tested after OAuth is implemented)
 
 ## Test Coverage
 
