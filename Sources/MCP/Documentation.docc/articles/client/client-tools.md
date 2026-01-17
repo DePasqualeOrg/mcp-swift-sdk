@@ -94,16 +94,16 @@ Tool results contain an array of content items. Each item can be text, image, au
 ```swift
 for item in result.content {
     switch item {
-    case .text(let text, _, _):
-        print("Text: \(text)")
-    case .image(let data, let mimeType, _, _):
-        print("Image (\(mimeType)): \(data.count) chars base64")
-    case .audio(let data, let mimeType, _, _):
-        print("Audio (\(mimeType))")
-    case .resource(let resource, _, _):
-        print("Resource: \(resource.uri)")
-    case .resourceLink(let link):
-        print("Link: \(link.uri)")
+        case .text(let text, _, _):
+            print("Text: \(text)")
+        case .image(let data, let mimeType, _, _):
+            print("Image (\(mimeType)): \(data.count) chars base64")
+        case .audio(let data, let mimeType, _, _):
+            print("Audio (\(mimeType))")
+        case .resource(let resource, _, _):
+            print("Resource: \(resource.uri)")
+        case .resourceLink(let link):
+            print("Link: \(link.uri)")
     }
 }
 ```

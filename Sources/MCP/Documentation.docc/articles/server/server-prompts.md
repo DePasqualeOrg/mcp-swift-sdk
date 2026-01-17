@@ -35,7 +35,7 @@ struct CodeReview {
 }
 ```
 
-Most prompts don't need the `HandlerContext`, so you can write `render()` without any parameters. If needed, you can include a `context` parameter to access logging or request metadata.
+Most prompts don't need the ``HandlerContext``, so you can write `render()` without any parameters. If needed, you can include a `context` parameter to access logging or request metadata.
 
 ### Argument Options
 

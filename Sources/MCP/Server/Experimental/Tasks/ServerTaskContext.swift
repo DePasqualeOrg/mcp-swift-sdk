@@ -383,12 +383,12 @@ public final class ServerTaskContext: Sendable {
     /// )
     ///
     /// switch result.action {
-    /// case .accept:
-    ///     // User completed the flow
-    /// case .decline:
-    ///     // User declined
-    /// case .cancel:
-    ///     // User cancelled
+    ///     case .accept:
+    ///         // User completed the flow
+    ///     case .decline:
+    ///         // User declined
+    ///     case .cancel:
+    ///         // User cancelled
     /// }
     /// ```
     ///

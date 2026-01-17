@@ -209,18 +209,18 @@ do {
     try await client.connect(transport: transport)
 } catch let error as MCPError {
     switch error {
-    case .connectionClosed:
-        print("Connection closed")
-    case .requestTimeout(let timeout, let message):
-        print("Timeout after \(timeout): \(message ?? "")")
-    case .methodNotFound(let method):
-        print("Method not found: \(method ?? "")")
-    case .invalidRequest(let message):
-        print("Invalid request: \(message)")
-    case .invalidParams(let message):
-        print("Invalid params: \(message)")
-    default:
-        print("MCP error: \(error)")
+        case .connectionClosed:
+            print("Connection closed")
+        case .requestTimeout(let timeout, let message):
+            print("Timeout after \(timeout): \(message ?? "")")
+        case .methodNotFound(let method):
+            print("Method not found: \(method ?? "")")
+        case .invalidRequest(let message):
+            print("Invalid request: \(message)")
+        case .invalidParams(let message):
+            print("Invalid params: \(message)")
+        default:
+            print("MCP error: \(error)")
     }
 } catch {
     print("Unexpected error: \(error)")

@@ -13,11 +13,10 @@ Register a handler for completion requests:
 ```swift
 await server.withRequestHandler(Complete.self) { params, _ in
     switch params.ref {
-    case .prompt(let promptRef):
-        return handlePromptCompletion(promptRef, argument: params.argument)
-
-    case .resource(let resourceRef):
-        return handleResourceCompletion(resourceRef, argument: params.argument)
+        case .prompt(let promptRef):
+            return handlePromptCompletion(promptRef, argument: params.argument)
+        case .resource(let resourceRef):
+            return handleResourceCompletion(resourceRef, argument: params.argument)
     }
 }
 ```
@@ -91,22 +90,21 @@ let server = Server(
 
 await server.withRequestHandler(Complete.self) { params, _ in
     switch params.ref {
-    case .prompt(let promptRef):
-        if promptRef.name == "translate" {
-            if params.argument.name == "from" || params.argument.name == "to" {
-                let prefix = params.argument.value.lowercased()
-                let languages = [
-                    "english", "spanish", "french", "german",
-                    "italian", "portuguese", "chinese", "japanese"
-                ]
-                let matches = languages.filter { $0.hasPrefix(prefix) }
-                return Complete.Result(completion: .init(values: matches))
+        case .prompt(let promptRef):
+            if promptRef.name == "translate" {
+                if params.argument.name == "from" || params.argument.name == "to" {
+                    let prefix = params.argument.value.lowercased()
+                    let languages = [
+                        "english", "spanish", "french", "german",
+                        "italian", "portuguese", "chinese", "japanese"
+                    ]
+                    let matches = languages.filter { $0.hasPrefix(prefix) }
+                    return Complete.Result(completion: .init(values: matches))
+                }
             }
-        }
-
-    case .resource(let resourceRef):
-        // Handle resource template completions
-        break
+        case .resource(let resourceRef):
+            // Handle resource template completions
+            break
     }
 
     return Complete.Result(completion: .init(values: []))

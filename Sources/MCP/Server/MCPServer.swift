@@ -371,10 +371,10 @@ public actor MCPServer {
 ///
 ///     var errorDescription: String? {
 ///         switch self {
-///         case .invalidDate(let date):
-///             return "Invalid date '\(date)': must be in ISO 8601 format (e.g., 2024-01-15)"
-///         case .resourceNotFound(let id):
-///             return "Resource '\(id)' not found. Use list_resources to see available resources."
+///             case .invalidDate(let date):
+///                 return "Invalid date '\(date)': must be in ISO 8601 format (e.g., 2024-01-15)"
+///             case .resourceNotFound(let id):
+///                 return "Resource '\(id)' not found. Use list_resources to see available resources."
 ///         }
 ///     }
 /// }

@@ -12,14 +12,14 @@ import Foundation
 /// ```swift
 /// for try await message in await client.experimental.tasks.callToolStream(name: "myTool") {
 ///     switch message {
-///     case .taskCreated(let task):
-///         print("Task started: \(task.taskId)")
-///     case .taskStatus(let task):
-///         print("Status: \(task.status)")
-///     case .result(let result):
-///         print("Tool completed with \(result.content.count) content blocks")
-///     case .error(let error):
-///         print("Error: \(error.localizedDescription)")
+///         case .taskCreated(let task):
+///             print("Task started: \(task.taskId)")
+///         case .taskStatus(let task):
+///             print("Status: \(task.status)")
+///         case .result(let result):
+///             print("Tool completed with \(result.content.count) content blocks")
+///         case .error(let error):
+///             print("Error: \(error.localizedDescription)")
 ///     }
 /// }
 /// ```
@@ -303,14 +303,14 @@ public struct ExperimentalClientTasks: Sendable {
     /// ```swift
     /// for try await message in await client.experimental.tasks.callToolStream(name: "myTool") {
     ///     switch message {
-    ///     case .taskCreated(let task):
-    ///         print("Task started: \(task.taskId)")
-    ///     case .taskStatus(let task):
-    ///         print("Status: \(task.status), message: \(task.statusMessage ?? "none")")
-    ///     case .result(let result):
-    ///         print("Tool completed with \(result.content.count) content blocks")
-    ///     case .error(let error):
-    ///         print("Error: \(error.localizedDescription)")
+    ///         case .taskCreated(let task):
+    ///             print("Task started: \(task.taskId)")
+    ///         case .taskStatus(let task):
+    ///             print("Status: \(task.status), message: \(task.statusMessage ?? "none")")
+    ///         case .result(let result):
+    ///             print("Tool completed with \(result.content.count) content blocks")
+    ///         case .error(let error):
+    ///             print("Error: \(error.localizedDescription)")
     ///     }
     /// }
     /// ```

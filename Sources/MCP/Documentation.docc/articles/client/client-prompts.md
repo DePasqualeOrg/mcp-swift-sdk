@@ -70,16 +70,16 @@ if let description = result.description {
 for message in result.messages {
     print("\(message.role):")
     switch message.content {
-    case .text(let text, _, _):
-        print("  \(text)")
-    case .image(let data, let mimeType, _, _):
-        print("  [Image: \(mimeType)]")
-    case .audio(let data, let mimeType, _, _):
-        print("  [Audio: \(mimeType)]")
-    case .resource(let resource, _, _):
-        print("  [Resource: \(resource.uri)]")
-    case .resourceLink(let link):
-        print("  [Link: \(link.uri)]")
+        case .text(let text, _, _):
+            print("  \(text)")
+        case .image(let data, let mimeType, _, _):
+            print("  [Image: \(mimeType)]")
+        case .audio(let data, let mimeType, _, _):
+            print("  [Audio: \(mimeType)]")
+        case .resource(let resource, _, _):
+            print("  [Resource: \(resource.uri)]")
+        case .resourceLink(let link):
+            print("  [Link: \(link.uri)]")
     }
 }
 ```

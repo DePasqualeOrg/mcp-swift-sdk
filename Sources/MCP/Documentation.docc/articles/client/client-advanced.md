@@ -66,9 +66,9 @@ Combine progress-aware timeouts with a hard limit:
 let result = try await client.send(
     CallTool.request(.init(name: "long_operation")),
     options: RequestOptions(
-        timeout: .seconds(30),           // Reset on progress
+        timeout: .seconds(30),         // Reset on progress
         resetTimeoutOnProgress: true,
-        maxTotalTimeout: .minutes(10)    // Hard limit
+        maxTotalTimeout: .minutes(10)  // Hard limit
     )
 ) { progress in
     print("Progress: \(progress.value) / \(progress.total ?? 100)")
@@ -96,6 +96,7 @@ let result = try await client.send(
 ```
 
 The ``Progress`` struct contains:
+
 - `value`: The current progress (increases monotonically)
 - `total`: The total value, if known
 - `message`: An optional status message

@@ -60,38 +60,36 @@ await server.withRequestHandler(ListTools.self) { _, _ in
 
 await server.withRequestHandler(CallTool.self) { params, _ in
     switch params.name {
-    case "weather":
-        let location = params.arguments?["location"]?.stringValue ?? "Unknown"
-        let weather = await getWeather(location: location)
-        return CallTool.Result(content: [.text("Weather in \(location): \(weather)")])
-
-    default:
-        throw MCPError.invalidParams("Unknown tool: \(params.name)")
+        case "weather":
+            let location = params.arguments?["location"]?.stringValue ?? "Unknown"
+            let weather = await getWeather(location: location)
+            return CallTool.Result(content: [.text("Weather in \(location): \(weather)")])
+        default:
+            throw MCPError.invalidParams("Unknown tool: \(params.name)")
     }
 }
 ```
 
 ### Error Handling with Low-Level API
 
-With the low-level `Server` API, thrown errors become JSON-RPC error responses (protocol errors). For recoverable tool execution errors that models can self-correct from, you must explicitly return `CallTool.Result` with `isError: true`:
+With the low-level ``Server`` API, thrown errors become JSON-RPC error responses (protocol errors). For recoverable tool execution errors that models can self-correct from, you must explicitly return `CallTool.Result` with `isError: true`:
 
 ```swift
 await server.withRequestHandler(CallTool.self) { params, _ in
     switch params.name {
-    case "weather":
-        guard let location = params.arguments?["location"]?.stringValue else {
-            // Recoverable error - model can retry with correct arguments
-            return CallTool.Result(
-                content: [.text("Missing required parameter: location")],
-                isError: true
-            )
-        }
-        let weather = await getWeather(location: location)
-        return CallTool.Result(content: [.text("Weather in \(location): \(weather)")])
-
-    default:
-        // Protocol error - unknown tool
-        throw MCPError.invalidParams("Unknown tool: \(params.name)")
+        case "weather":
+            guard let location = params.arguments?["location"]?.stringValue else {
+                // Recoverable error - model can retry with correct arguments
+                return CallTool.Result(
+                    content: [.text("Missing required parameter: location")],
+                    isError: true
+                )
+            }
+            let weather = await getWeather(location: location)
+            return CallTool.Result(content: [.text("Weather in \(location): \(weather)")])
+        default:
+            // Protocol error - unknown tool
+            throw MCPError.invalidParams("Unknown tool: \(params.name)")
     }
 }
 ```
@@ -114,14 +112,13 @@ await server.withRequestHandler(ListResources.self) { _, _ in
 
 await server.withRequestHandler(ReadResource.self) { params, _ in
     switch params.uri {
-    case "config://app":
-        let config = loadConfiguration()
-        return ReadResource.Result(contents: [
-            .text(config.jsonString, uri: params.uri, mimeType: "application/json")
-        ])
-
-    default:
-        throw MCPError.resourceNotFound(uri: params.uri)
+        case "config://app":
+            let config = loadConfiguration()
+            return ReadResource.Result(contents: [
+                .text(config.jsonString, uri: params.uri, mimeType: "application/json")
+            ])
+        default:
+            throw MCPError.resourceNotFound(uri: params.uri)
     }
 }
 ```

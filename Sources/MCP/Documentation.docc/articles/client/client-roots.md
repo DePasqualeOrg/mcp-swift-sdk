@@ -87,8 +87,8 @@ All root URIs must use the `file://` scheme:
 Root(uri: "file:///path/to/directory", name: "My Directory")
 
 // Invalid - will fail
-Root(uri: "/path/to/directory", name: "Missing scheme")      // No scheme
-Root(uri: "https://example.com", name: "Wrong scheme")       // Wrong scheme
+Root(uri: "/path/to/directory", name: "Missing scheme")  // No scheme
+Root(uri: "https://example.com", name: "Wrong scheme")   // Wrong scheme
 ```
 
 ## Notifying Root Changes

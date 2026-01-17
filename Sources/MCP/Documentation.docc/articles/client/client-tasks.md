@@ -54,10 +54,10 @@ let result = try await client.experimental.tasks.getTaskResult(taskId)
 let toolResult = try await client.experimental.tasks.getToolResult(taskId)
 for content in toolResult.content {
     switch content {
-    case .text(let text, _, _):
-        print("Result: \(text)")
-    default:
-        break
+        case .text(let text, _, _):
+            print("Result: \(text)")
+        default:
+            break
     }
 }
 ```
@@ -69,17 +69,17 @@ Combine task creation, polling, and result retrieval in a single stream:
 ```swift
 for try await message in await client.experimental.tasks.callToolStream(name: "myTool") {
     switch message {
-    case .taskCreated(let task):
-        print("Task started: \(task.taskId)")
-    case .taskStatus(let task):
-        print("Status: \(task.status)")
-        if let message = task.statusMessage {
-            print("Message: \(message)")
-        }
-    case .result(let result):
-        print("Completed with \(result.content.count) content blocks")
-    case .error(let error):
-        print("Error: \(error)")
+        case .taskCreated(let task):
+            print("Task started: \(task.taskId)")
+        case .taskStatus(let task):
+            print("Status: \(task.status)")
+            if let message = task.statusMessage {
+                print("Message: \(message)")
+            }
+        case .result(let result):
+            print("Completed with \(result.content.count) content blocks")
+        case .error(let error):
+            print("Error: \(error)")
     }
 }
 ```

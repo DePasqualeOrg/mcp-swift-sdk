@@ -4,21 +4,12 @@ Register tools that clients can discover and call.
 
 ## Overview
 
-Tools are functions that your server exposes to clients. Each tool has a name, description, and input schema. Clients can list available tools and call them with arguments.
+Tools are functions that your server exposes to clients. Each tool has a name, description, and input schema. Clients can [list](<doc:client-tools#Listing-Tools>) available tools and [call](<doc:client-tools#Calling-Tools>) them with arguments.
 
 The Swift SDK provides two approaches:
+
 - **`@Tool` macro**: Define tools as Swift types with automatic schema generation (recommended)
 - **Closure-based**: Register tools dynamically at runtime
-
-## Tool Naming
-
-Tool names should follow these conventions:
-- Between 1 and 128 characters
-- Case-sensitive
-- Use only: letters (A-Z, a-z), digits (0-9), underscore (_), hyphen (-), and dot (.)
-- Unique within your server
-
-Examples: `getUser`, `DATA_EXPORT_v2`, `admin.tools.list`
 
 ## Defining Tools
 
@@ -43,7 +34,7 @@ struct GetWeather {
 }
 ```
 
-Most tools don't need the `HandlerContext`, so you can write `perform()` without any parameters. If your tool needs progress reporting, logging, or request metadata, include the `context` parameter—see [Using HandlerContext](#Using-HandlerContext) below.
+Most tools don't need the ``HandlerContext``, so you can write `perform()` without any parameters. If your tool needs progress reporting, logging, or request metadata, include the `context` parameter—see [Using HandlerContext](#Using-HandlerContext) below.
 
 ### Parameter Options
 
@@ -353,7 +344,7 @@ func perform(context: HandlerContext) async throws -> String {
     guard result.action == .accept else {
         return "Cancelled"
     }
-    // proceed with deletion...
+    // Proceed with deletion...
 }
 
 // Request LLM completion during tool execution
@@ -411,6 +402,7 @@ try await server.register(
 - **`.closedWorld`**: Tool does not interact with external systems
 
 When the annotations array is empty (the default), MCP implicit defaults apply:
+
 - `readOnlyHint: false` — tool may modify state
 - `destructiveHint: true` — tool may destroy data
 - `idempotentHint: false` — repeated calls may have different effects
@@ -477,10 +469,10 @@ enum MyToolError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidDate(let date):
-            return "Invalid date '\(date)': must be in the future"
-        case .resourceNotFound(let path):
-            return "Resource not found: \(path)"
+            case .invalidDate(let date):
+                return "Invalid date '\(date)': must be in the future"
+            case .resourceNotFound(let path):
+                return "Resource not found: \(path)"
         }
     }
 }
@@ -547,6 +539,7 @@ struct GetWeatherData {
 ```
 
 Types conforming to `StructuredOutput` (via `@OutputSchema`) automatically:
+
 - Include `outputSchema` in the tool definition
 - Serialize to both human-readable text and structured JSON content
 
@@ -557,6 +550,17 @@ Types conforming to `StructuredOutput` (via `@OutputSchema`) automatically:
 ```swift
 await server.sendToolListChanged()
 ```
+
+## Tool Naming
+
+Tool names should follow these conventions:
+
+- Between 1 and 128 characters
+- Case-sensitive
+- Use only: letters (A-Z, a-z), digits (0-9), underscore (\_), hyphen (-), and dot (.)
+- Unique within your server
+
+Examples: `getUser`, `DATA_EXPORT_v2`, `admin.tools.list`
 
 ## Low-Level API
 

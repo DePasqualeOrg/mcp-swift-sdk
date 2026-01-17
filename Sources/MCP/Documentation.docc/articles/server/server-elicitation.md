@@ -176,20 +176,18 @@ Check how the user responded:
 let result = try await context.elicit(...)
 
 switch result.action {
-case .accept:
-    // User submitted the form
-    if let content = result.content {
-        let name = content["name"]
-        // Process the input
-    }
-
-case .decline:
-    // User explicitly declined
-    return CallTool.Result(content: [.text("Operation declined")], isError: true)
-
-case .cancel:
-    // User dismissed without making a choice
-    return CallTool.Result(content: [.text("Operation cancelled")], isError: true)
+    case .accept:
+        // User submitted the form
+        if let content = result.content {
+            let name = content["name"]
+            // Process the input
+        }
+    case .decline:
+        // User explicitly declined
+        return CallTool.Result(content: [.text("Operation declined")], isError: true)
+    case .cancel:
+        // User dismissed without making a choice
+        return CallTool.Result(content: [.text("Operation cancelled")], isError: true)
 }
 ```
 

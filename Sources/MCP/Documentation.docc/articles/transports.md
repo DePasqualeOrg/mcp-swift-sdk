@@ -79,7 +79,7 @@ Host MCP servers over HTTP. Integrates with any HTTP framework (Hummingbird, Vap
 
 DNS rebinding is an attack where malicious websites bypass browser same-origin policy to access local servers. This is a threat for MCP servers running on user machines.
 
-#### Local Development / Servers on User Machines
+#### Local Development, Servers on User Machines
 
 Protection is enabled by default. The default settings protect localhost-bound servers:
 
@@ -99,9 +99,9 @@ let transport = HTTPServerTransport(
 )
 ```
 
-#### Cloud / Container Deployments
+#### Cloud Deployments
 
-For cloud deployments (Docker, Kubernetes, etc.), DNS rebinding is not a threat since there's no local browser to exploit. Use `.none`:
+For cloud deployments, DNS rebinding is not a threat, since there's no local browser to exploit. Use `.none`:
 
 ```swift
 let transport = HTTPServerTransport(
@@ -183,6 +183,7 @@ func handleMCPRequest(_ request: HTTPRequest) async throws -> HTTPResponse {
 DNS rebinding protection validates the `Host` header. When converting requests from your HTTP framework to `MCP.HTTPRequest`, ensure the Host header is included.
 
 **Vapor (NIOHTTP1):** Headers include Host automatically when iterating:
+
 ```swift
 func extractHeaders(from req: Vapor.Request) -> [String: String] {
     var headers: [String: String] = [:]
@@ -194,6 +195,7 @@ func extractHeaders(from req: Vapor.Request) -> [String: String] {
 ```
 
 **Hummingbird (HTTPTypes):** Host is stored separately in `authority`:
+
 ```swift
 func extractHeaders(from request: Hummingbird.Request) -> [String: String] {
     var headers: [String: String] = [:]
@@ -329,13 +331,13 @@ public actor MyCustomTransport: Transport {
 
 ## Platform Availability
 
-| Transport | macOS | iOS | watchOS | tvOS | visionOS | Linux |
-|-----------|-------|-----|---------|------|----------|-------|
-| StdioTransport | 13.0+ | 16.0+ | 9.0+ | 16.0+ | 1.0+ | glibc/musl |
-| HTTPClientTransport | 13.0+ | 16.0+ | 9.0+ | 16.0+ | 1.0+ | ✓ |
-| HTTPServerTransport | 13.0+ | 16.0+ | 9.0+ | 16.0+ | 1.0+ | ✓ |
-| InMemoryTransport | 13.0+ | 16.0+ | 9.0+ | 16.0+ | 1.0+ | ✓ |
-| NetworkTransport | 13.0+ | 16.0+ | 9.0+ | 16.0+ | 1.0+ | ✗ |
+| Transport           | macOS | iOS   | watchOS | tvOS  | visionOS | Linux      |
+| ------------------- | ----- | ----- | ------- | ----- | -------- | ---------- |
+| StdioTransport      | 13.0+ | 16.0+ | 9.0+    | 16.0+ | 1.0+     | glibc/musl |
+| HTTPClientTransport | 13.0+ | 16.0+ | 9.0+    | 16.0+ | 1.0+     | ✓          |
+| HTTPServerTransport | 13.0+ | 16.0+ | 9.0+    | 16.0+ | 1.0+     | ✓          |
+| InMemoryTransport   | 13.0+ | 16.0+ | 9.0+    | 16.0+ | 1.0+     | ✓          |
+| NetworkTransport    | 13.0+ | 16.0+ | 9.0+    | 16.0+ | 1.0+     | ✗          |
 
 ## See Also
 

@@ -108,7 +108,7 @@ See the [VaporIntegration](https://github.com/DePasqualeOrg/mcp-swift-sdk/tree/m
 and [HummingbirdIntegration](https://github.com/DePasqualeOrg/mcp-swift-sdk/tree/main/Examples/HummingbirdIntegration)
 examples for complete implementations.
 
-For simple demos and testing, `BasicHTTPSessionManager` handles session lifecycle automatically:
+For simple demos and testing, ``BasicHTTPSessionManager`` handles session lifecycle automatically:
 
 ```swift
 let sessionManager = BasicHTTPSessionManager(server: mcpServer, port: 8080)

@@ -283,10 +283,10 @@ extension Client {
     ///     urlMode: .enabled
     /// ) { params, context in
     ///     switch params {
-    ///     case .form(let formParams):
-    ///         return try await handleFormElicitation(formParams)
-    ///     case .url(let urlParams):
-    ///         return try await handleUrlElicitation(urlParams)
+    ///         case .form(let formParams):
+    ///             return try await handleFormElicitation(formParams)
+    ///         case .url(let urlParams):
+    ///             return try await handleUrlElicitation(urlParams)
     ///     }
     /// }
     ///

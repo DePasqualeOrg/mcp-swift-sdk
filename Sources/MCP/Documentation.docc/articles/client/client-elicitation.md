@@ -20,13 +20,13 @@ let client = Client(name: "MyApp", version: "1.0.0")
 // Enable both form and URL modes
 await client.withElicitationHandler(
     formMode: .enabled(applyDefaults: true),  // Support form mode with defaults
-    urlMode: .enabled                          // Support URL mode
+    urlMode: .enabled                         // Support URL mode
 ) { params, context in
     switch params {
-    case .form(let formParams):
-        return try await handleFormElicitation(formParams)
-    case .url(let urlParams):
-        return try await handleURLElicitation(urlParams)
+        case .form(let formParams):
+            return try await handleFormElicitation(formParams)
+        case .url(let urlParams):
+            return try await handleURLElicitation(urlParams)
     }
 }
 
@@ -90,44 +90,37 @@ The ``ElicitationSchema`` contains fields with various types:
 ```swift
 for (fieldName, fieldSchema) in params.requestedSchema.properties {
     switch fieldSchema {
-    case .string(let schema):
-        // Text field with optional format (email, uri, date)
-        print("String field: \(schema.title ?? fieldName)")
-        if let format = schema.format {
-            print("Format: \(format)")
-        }
-
-    case .number(let schema):
-        // Numeric field (integer or decimal)
-        print("Number field: \(schema.title ?? fieldName)")
-
-    case .boolean(let schema):
-        // Checkbox/toggle
-        print("Boolean field: \(schema.title ?? fieldName)")
-
-    case .untitledEnum(let schema):
-        // Single-select dropdown
-        print("Choices: \(schema.enumValues)")
-
-    case .titledEnum(let schema):
-        // Single-select with display labels
-        for option in schema.oneOf {
-            print("\(option.title): \(option.const)")
-        }
-
-    case .untitledMultiSelect(let schema):
-        // Multi-select list
-        print("Multi-select: \(schema.items.enumValues)")
-
-    case .titledMultiSelect(let schema):
-        // Multi-select with display labels
-        for option in schema.items.anyOf {
-            print("\(option.title): \(option.const)")
-        }
-
-    case .legacyTitledEnum(let schema):
-        // Legacy format with enumNames
-        print("Choices: \(schema.enumValues)")
+        case .string(let schema):
+            // Text field with optional format (email, uri, date)
+            print("String field: \(schema.title ?? fieldName)")
+            if let format = schema.format {
+                print("Format: \(format)")
+            }
+        case .number(let schema):
+            // Numeric field (integer or decimal)
+            print("Number field: \(schema.title ?? fieldName)")
+        case .boolean(let schema):
+            // Checkbox/toggle
+            print("Boolean field: \(schema.title ?? fieldName)")
+        case .untitledEnum(let schema):
+            // Single-select dropdown
+            print("Choices: \(schema.enumValues)")
+        case .titledEnum(let schema):
+            // Single-select with display labels
+            for option in schema.oneOf {
+                print("\(option.title): \(option.const)")
+            }
+        case .untitledMultiSelect(let schema):
+            // Multi-select list
+            print("Multi-select: \(schema.items.enumValues)")
+        case .titledMultiSelect(let schema):
+            // Multi-select with display labels
+            for option in schema.items.anyOf {
+                print("\(option.title): \(option.const)")
+            }
+        case .legacyTitledEnum(let schema):
+            // Legacy format with enumNames
+            print("Choices: \(schema.enumValues)")
     }
 }
 ```

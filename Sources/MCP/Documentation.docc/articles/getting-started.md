@@ -61,7 +61,7 @@ await server.close()
 
 1. **Define tools with `@Tool`**: The macro generates JSON Schema from your Swift types and handles argument parsing automatically.
 
-2. **Create an `MCPServer`**: The high-level server manages capabilities and request handlers for you.
+2. **Create an ``MCPServer``**: The high-level server manages capabilities and request handlers for you.
 
 3. **Register tools**: Use the result builder syntax to register one or more tools.
 

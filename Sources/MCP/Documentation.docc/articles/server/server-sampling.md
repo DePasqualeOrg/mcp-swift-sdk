@@ -132,22 +132,22 @@ let result = try await server.createMessage(...)
 
 // Content is a single block (text, image, or audio)
 switch result.content {
-case .text(let text, _, _):
-    print("Text: \(text)")
-case .image(let data, let mimeType, _, _):
-    print("Image: \(mimeType)")
-case .audio(let data, let mimeType, _, _):
-    print("Audio: \(mimeType)")
+    case .text(let text, _, _):
+        print("Text: \(text)")
+    case .image(let data, let mimeType, _, _):
+        print("Image: \(mimeType)")
+    case .audio(let data, let mimeType, _, _):
+        print("Audio: \(mimeType)")
 }
 
 // Check stop reason
 switch result.stopReason {
-case .endTurn:
-    print("Natural end of response")
-case .maxTokens:
-    print("Hit token limit")
-default:
-    break
+    case .endTurn:
+        print("Natural end of response")
+    case .maxTokens:
+        print("Hit token limit")
+    default:
+        break
 }
 ```
 
@@ -161,26 +161,26 @@ let result = try await server.createMessageWithTools(...)
 // Content is an array of blocks
 for content in result.content {
     switch content {
-    case .text(let text, _, _):
-        print("Text: \(text)")
-    case .toolUse(let toolUse):
-        print("Tool call: \(toolUse.name)")
-        print("Arguments: \(toolUse.input)")
-    default:
-        break
+        case .text(let text, _, _):
+            print("Text: \(text)")
+        case .toolUse(let toolUse):
+            print("Tool call: \(toolUse.name)")
+            print("Arguments: \(toolUse.input)")
+        default:
+            break
     }
 }
 
 // Check stop reason
 switch result.stopReason {
-case .endTurn:
-    print("Natural end of response")
-case .maxTokens:
-    print("Hit token limit")
-case .toolUse:
-    print("Stopped for tool use")
-default:
-    break
+    case .endTurn:
+        print("Natural end of response")
+    case .maxTokens:
+        print("Hit token limit")
+    case .toolUse:
+        print("Stopped for tool use")
+    default:
+        break
 }
 ```
 
