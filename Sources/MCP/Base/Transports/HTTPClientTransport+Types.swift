@@ -2,6 +2,40 @@ import Foundation
 
 // Types extracted from HTTPClientTransport.swift
 // - HTTPReconnectionOptions
+// - URLSessionConfiguration extension for MCP
+
+// MARK: - MCP Default Timeout Configuration
+
+/// Default timeout for general HTTP operations (connect, write).
+/// Matches the Python SDK's MCP_DEFAULT_TIMEOUT.
+public let mcpDefaultTimeout: TimeInterval = 30.0
+
+/// Default timeout for SSE read operations.
+/// SSE connections need longer timeouts since they wait for server-pushed events.
+/// Matches the Python SDK's MCP_DEFAULT_SSE_READ_TIMEOUT.
+public let mcpDefaultSSEReadTimeout: TimeInterval = 300.0
+
+extension URLSessionConfiguration {
+    /// Creates a URLSessionConfiguration optimized for MCP HTTP transport.
+    ///
+    /// This configuration sets appropriate timeouts for long-lived SSE connections:
+    /// - `timeoutIntervalForRequest`: 300 seconds (5 minutes) to handle slow responses
+    ///   and SSE connections that wait for server events
+    /// - `timeoutIntervalForResource`: 3600 seconds (1 hour) for the total connection lifetime
+    ///
+    /// These defaults match the Python MCP SDK's timeout configuration.
+    public static var mcp: URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        // Use SSE read timeout for request interval since SSE connections
+        // may wait extended periods for server events
+        configuration.timeoutIntervalForRequest = mcpDefaultSSEReadTimeout
+        // Allow connections to stay open for up to 1 hour
+        configuration.timeoutIntervalForResource = 3600
+        return configuration
+    }
+}
+
+// MARK: - Reconnection Options
 
 /// Configuration options for reconnection behavior of the HTTPClientTransport.
 ///

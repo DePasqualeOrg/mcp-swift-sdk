@@ -118,7 +118,9 @@ public actor HTTPClientTransport: Transport {
     ///
     /// - Parameters:
     ///   - endpoint: The server URL to connect to
-    ///   - configuration: URLSession configuration to use for HTTP requests
+    ///   - configuration: URLSession configuration to use for HTTP requests.
+    ///     Defaults to `.mcp` which provides appropriate timeouts for SSE connections
+    ///     (5 minute request timeout, 1 hour resource timeout).
     ///   - streaming: Whether to enable SSE streaming mode (default: true)
     ///   - sseInitializationTimeout: Maximum time to wait for session ID before proceeding with SSE (default: 10 seconds)
     ///   - reconnectionOptions: Configuration for reconnection behavior (default: .default)
@@ -130,7 +132,7 @@ public actor HTTPClientTransport: Transport {
     ///   - logger: Optional logger instance for transport events
     public init(
         endpoint: URL,
-        configuration: URLSessionConfiguration = .default,
+        configuration: URLSessionConfiguration = .mcp,
         streaming: Bool = true,
         sseInitializationTimeout: TimeInterval = 10,
         reconnectionOptions: HTTPReconnectionOptions = .default,
