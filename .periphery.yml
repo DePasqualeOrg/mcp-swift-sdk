@@ -1,0 +1,12 @@
+retain_public: true
+exclude_tests: true
+
+# Retain files where Periphery can't detect usage:
+# - Macro declarations (usage by external consumers)
+# - Macro implementations (struct properties used during expansion)
+retain_files:
+  - Sources/MCP/PromptDSL/PromptSpec.swift
+  - Sources/MCP/ToolDSL/ToolSpec.swift
+  - Sources/MCP/ToolDSL/ToolOutput.swift
+  - Sources/MCPMacros/PromptMacro.swift
+  - Sources/MCPMacros/ToolMacro.swift
