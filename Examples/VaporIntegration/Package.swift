@@ -16,7 +16,7 @@ let package = Package(
             name: "VaporMCPExample",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
             ],
             path: "Sources"
         ),

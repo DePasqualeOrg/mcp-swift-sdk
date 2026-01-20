@@ -1,8 +1,8 @@
 // swift-tools-version:6.1
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
-import PackageDescription
 import CompilerPluginSupport
+import PackageDescription
 
 // Base dependencies needed on all platforms
 var dependencies: [Package.Dependency] = [
@@ -10,7 +10,7 @@ var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     .package(url: "https://github.com/mattt/eventsource.git", from: "1.1.0"),
     .package(url: "https://github.com/ajevans99/swift-json-schema", from: "0.2.1"),
-    .package(url: "https://github.com/swiftlang/swift-syntax", "600.0.0"..<"603.0.0"),
+    .package(url: "https://github.com/swiftlang/swift-syntax", "600.0.0" ..< "603.0.0"),
     .package(url: "https://github.com/swiftlang/swift-docc", branch: "main"),
     .package(url: "https://github.com/swiftlang/swift-docc-plugin", branch: "main"),
     // Test-only dependency for real HTTP testing
@@ -23,7 +23,8 @@ var targetDependencies: [Target.Dependency] = [
     .product(name: "Logging", package: "swift-log"),
     .product(
         name: "EventSource", package: "eventsource",
-        condition: .when(platforms: [.macOS, .iOS, .tvOS, .visionOS, .watchOS, .macCatalyst])),
+        condition: .when(platforms: [.macOS, .iOS, .tvOS, .visionOS, .watchOS, .macCatalyst])
+    ),
     .product(name: "JSONSchema", package: "swift-json-schema"),
 ]
 
@@ -45,7 +46,7 @@ testTargetDependencies.append(.product(name: "Hummingbird", package: "hummingbir
 testTargetDependencies.append(.product(name: "HummingbirdTesting", package: "hummingbird"))
 
 let package = Package(
-    name: "mcp-swift-sdk",
+    name: "swift-mcp",
     platforms: [
         .macOS("13.0"),
         .macCatalyst("16.0"),
@@ -57,7 +58,8 @@ let package = Package(
     products: [
         .library(
             name: "MCP",
-            targets: ["MCP"])
+            targets: ["MCP"]
+        ),
     ],
     dependencies: dependencies,
     targets: [
@@ -65,19 +67,20 @@ let package = Package(
             name: "MCPMacros",
             dependencies: macroDependencies,
             swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency")
+                .enableUpcomingFeature("StrictConcurrency"),
             ]
         ),
         .target(
             name: "MCP",
             dependencies: mcpTargetDependencies,
             swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency")
+                .enableUpcomingFeature("StrictConcurrency"),
             ]
         ),
         .testTarget(
             name: "MCPTests",
-            dependencies: testTargetDependencies),
+            dependencies: testTargetDependencies
+        ),
         .testTarget(
             name: "MCPMacroTests",
             dependencies: [

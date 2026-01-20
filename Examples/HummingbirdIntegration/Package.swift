@@ -16,7 +16,7 @@ let package = Package(
             name: "HummingbirdMCPExample",
             dependencies: [
                 .product(name: "Hummingbird", package: "hummingbird"),
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
             ],
             path: "Sources"
         ),

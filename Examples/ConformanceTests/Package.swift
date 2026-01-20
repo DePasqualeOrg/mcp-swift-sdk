@@ -16,7 +16,7 @@ let package = Package(
         .executableTarget(
             name: "ConformanceClient",
             dependencies: [
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/ConformanceClient"
@@ -25,7 +25,7 @@ let package = Package(
             name: "ConformanceServer",
             dependencies: [
                 .product(name: "Hummingbird", package: "hummingbird"),
-                .product(name: "MCP", package: "mcp-swift-sdk"),
+                .product(name: "MCP", package: "swift-mcp"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/ConformanceServer"

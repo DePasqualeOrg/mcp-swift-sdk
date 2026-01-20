@@ -6,10 +6,10 @@ Create an MCP server and handle client connections.
 
 The Swift SDK provides two server APIs:
 
-- **``MCPServer``**: High-level API with automatic capability management, tool/resource/prompt registration, and lifecycle handling (recommended)
-- **``Server``**: Low-level API for custom request handling and advanced use cases
+- **`MCPServer`**: High-level API with automatic capability management, tool/resource/prompt registration, and lifecycle handling (recommended)
+- **`Server`**: Low-level API for custom request handling and advanced use cases
 
-This guide covers the high-level ``MCPServer``. For the low-level API, see <doc:server-advanced>.
+This guide covers the high-level `MCPServer`. For the low-level API, see <doc:server-advanced>.
 
 ## Creating a Server
 
@@ -37,7 +37,7 @@ let server = MCPServer(
 
 ## Registering Tools, Resources, and Prompts
 
-``MCPServer`` manages capabilities automatically based on what you register:
+`MCPServer` manages capabilities automatically based on what you register:
 
 ```swift
 // Register tools - enables tools capability
@@ -104,11 +104,11 @@ let transport = HTTPServerTransport(...)
 try await session.start(transport: transport)
 ```
 
-See the [VaporIntegration](https://github.com/DePasqualeOrg/mcp-swift-sdk/tree/main/Examples/VaporIntegration)
-and [HummingbirdIntegration](https://github.com/DePasqualeOrg/mcp-swift-sdk/tree/main/Examples/HummingbirdIntegration)
+See the [Vapor Integration](https://github.com/DePasqualeOrg/swift-mcp/tree/main/Examples/VaporIntegration)
+and [Hummingbird Integration](https://github.com/DePasqualeOrg/swift-mcp/tree/main/Examples/HummingbirdIntegration)
 examples for complete implementations.
 
-For simple demos and testing, ``BasicHTTPSessionManager`` handles session lifecycle automatically:
+For simple demos and testing, `BasicHTTPSessionManager` handles session lifecycle automatically:
 
 ```swift
 let sessionManager = BasicHTTPSessionManager(server: mcpServer, port: 8080)
@@ -172,5 +172,5 @@ For scenarios requiring custom request handling, direct protocol access, or mixi
 - <doc:server-prompts>
 - <doc:server-advanced>
 - <doc:transports>
-- ``MCPServer``
-- ``Server``
+- `MCPServer`
+- `Server`

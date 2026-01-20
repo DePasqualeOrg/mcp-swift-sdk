@@ -8,13 +8,13 @@ MCP's transport layer handles communication between clients and servers. The Swi
 
 ## Available Transports
 
-| Transport | Description | Use Case |
-|-----------|-------------|----------|
-| ``StdioTransport`` | Standard input/output streams | Local subprocesses, CLI tools |
-| ``HTTPClientTransport`` | HTTP client with SSE streaming | Connect to remote servers |
-| ``HTTPServerTransport`` | HTTP server for hosting | Host servers over HTTP |
-| ``InMemoryTransport`` | Direct in-process communication | Testing, same-process scenarios |
-| ``NetworkTransport`` | Apple Network framework | Custom TCP/UDP protocols |
+| Transport             | Description                     | Use Case                        |
+| --------------------- | ------------------------------- | ------------------------------- |
+| `StdioTransport`      | Standard input/output streams   | Local subprocesses, CLI tools   |
+| `HTTPClientTransport` | HTTP client with SSE streaming  | Connect to remote servers       |
+| `HTTPServerTransport` | HTTP server for hosting         | Host servers over HTTP          |
+| `InMemoryTransport`   | Direct in-process communication | Testing, same-process scenarios |
+| `NetworkTransport`    | Apple Network framework         | Custom TCP/UDP protocols        |
 
 ## StdioTransport
 
@@ -137,7 +137,7 @@ let transport = HTTPServerTransport(
 )
 ```
 
-See ``DNSRebindingProtection`` for full documentation.
+See `DNSRebindingProtection` for full documentation.
 
 ### Stateful Mode
 
@@ -210,11 +210,11 @@ func extractHeaders(from request: Hummingbird.Request) -> [String: String] {
 }
 ```
 
-See the [integration examples](https://github.com/DePasqualeOrg/mcp-swift-sdk/tree/main/Examples) for complete examples.
+See the [integration examples](https://github.com/DePasqualeOrg/swift-mcp/tree/main/Examples) for complete examples.
 
 ## BasicHTTPSessionManager
 
-For simple demos and testing, ``BasicHTTPSessionManager`` handles session lifecycle automatically:
+For simple demos and testing, `BasicHTTPSessionManager` handles session lifecycle automatically:
 
 ```swift
 let mcpServer = MCPServer(name: "my-server", version: "1.0.0")
@@ -226,7 +226,7 @@ let sessionManager = BasicHTTPSessionManager(server: mcpServer, port: 8080)
 let response = await sessionManager.handleRequest(httpRequest)
 ```
 
-See ``BasicHTTPSessionManager`` for limitations and when to implement custom session management.
+See `BasicHTTPSessionManager` for limitations and when to implement custom session management.
 
 ## SessionManager
 
@@ -287,7 +287,7 @@ let transport = NetworkTransport(connection: connection)
 
 ## Custom Transport Implementation
 
-Implement the ``Transport`` protocol for custom transports:
+Implement the `Transport` protocol for custom transports:
 
 ```swift
 public actor MyCustomTransport: Transport {
