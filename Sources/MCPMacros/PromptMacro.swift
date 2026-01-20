@@ -94,7 +94,7 @@ public struct PromptMacro: MemberMacro, ExtensionMacro {
         }
 
         let extensionDecl: DeclSyntax = """
-        extension \(type): PromptSpec {}
+        extension \(type): MCP.PromptSpec {}
         """
 
         guard let ext = extensionDecl.as(ExtensionDeclSyntax.self) else {

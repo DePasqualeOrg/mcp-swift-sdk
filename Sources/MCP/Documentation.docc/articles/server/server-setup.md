@@ -129,6 +129,7 @@ try await server.run(transport: .custom(transport))
 
 ```swift
 import MCP
+import MCPTool
 
 @Tool
 struct Echo {

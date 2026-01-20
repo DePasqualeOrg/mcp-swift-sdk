@@ -13,7 +13,14 @@ The Swift SDK provides two approaches:
 
 ## Defining Tools
 
-The `@Tool` macro generates JSON Schema from Swift types and handles argument parsing automatically:
+The `@Tool` macro generates JSON Schema from Swift types and handles argument parsing automatically. Import `MCPTool` to use the `@Tool` macro and `@Parameter` property wrapper:
+
+```swift
+import MCP
+import MCPTool
+```
+
+Here's a complete tool definition:
 
 ```swift
 @Tool

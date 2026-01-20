@@ -81,68 +81,11 @@ public protocol PromptSpec: Sendable {
     init()
 }
 
-/// Macro that generates `PromptSpec` conformance for a struct.
-///
-/// The macro generates:
-/// - `promptDefinition` with arguments derived from `@Argument` properties
-/// - `parse(from:)` for converting string arguments to typed properties
-/// - `init()` empty initializer
-/// - `render(context:)` bridging method (only if you write `render()` without context)
-/// - `PromptSpec` protocol conformance
-///
-/// Use this macro for prompts known at compile time. For prompts discovered
-/// at runtime (from config files, databases, plugins), use
-/// `MCPServer.registerPrompt(name:arguments:handler:)` instead.
-///
-/// ## Basic Usage
-///
-/// Most prompts don't need the `HandlerContext`. Just write `render()` without parameters:
-///
-/// ```swift
-/// @Prompt
-/// struct CodeReviewPrompt {
-///     static let name = "code_review"
-///     static let description = "Review code changes"
-///     static let title = "Code Review"  // Optional display title
-///
-///     @Argument(description: "The code to review")
-///     var code: String
-///
-///     @Argument(description: "Programming language")
-///     var language: String?
-///
-///     func render() async throws -> [Prompt.Message] {
-///         var messages: [Prompt.Message] = [
-///             .user("Please review this code:")
-///         ]
-///         if let lang = language {
-///             messages.append(.user("Language: \(lang)"))
-///         }
-///         messages.append(.user(code))
-///         return messages
-///     }
-/// }
-/// ```
-///
-/// ## Using HandlerContext
-///
-/// Include the `context` parameter when you need logging or request metadata:
-///
-/// ```swift
-/// @Prompt
-/// struct AuditedPrompt {
-///     static let name = "audited"
-///     static let description = "A prompt that logs usage"
-///
-///     @Argument(description: "Query")
-///     var query: String
-///
-///     func render(context: HandlerContext) async throws -> [Prompt.Message] {
-///         try await context.log(level: .info, message: "Prompt requested: \(query)")
-///         return [.user(query)]
-///     }
-/// }
-/// ```
-@attached(member, names: named(promptDefinition), named(parse), named(init), named(render))
-@attached(extension, conformances: PromptSpec)
-public macro Prompt() = #externalMacro(module: "MCPMacros", type: "PromptMacro")
+// The @Prompt macro is provided by the MCPTool module.
+// Import MCPTool alongside MCP to define prompts:
+//
+//     import MCP
+//     import MCPTool
+//
+//     @Prompt
+//     struct MyPrompt { ... }

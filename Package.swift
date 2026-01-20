@@ -35,12 +35,11 @@ let macroDependencies: [Target.Dependency] = [
     .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
 ]
 
-// MCP target dependencies (targetDependencies + MCPMacros)
+// MCP target dependencies (core types, no macros)
 var mcpTargetDependencies: [Target.Dependency] = targetDependencies
-mcpTargetDependencies.append("MCPMacros")
 
-// MCPTests target dependencies (MCP + targetDependencies + Hummingbird for HTTP testing)
-var testTargetDependencies: [Target.Dependency] = ["MCP"]
+// MCPTests target dependencies (MCP + MCPTool + MCPPrompt + Hummingbird for HTTP testing)
+var testTargetDependencies: [Target.Dependency] = ["MCP", "MCPTool", "MCPPrompt"]
 testTargetDependencies.append(contentsOf: targetDependencies)
 testTargetDependencies.append(.product(name: "Hummingbird", package: "hummingbird"))
 testTargetDependencies.append(.product(name: "HummingbirdTesting", package: "hummingbird"))
@@ -60,6 +59,14 @@ let package = Package(
             name: "MCP",
             targets: ["MCP"]
         ),
+        .library(
+            name: "MCPTool",
+            targets: ["MCPTool"]
+        ),
+        .library(
+            name: "MCPPrompt",
+            targets: ["MCPPrompt"]
+        ),
     ],
     dependencies: dependencies,
     targets: [
@@ -73,6 +80,20 @@ let package = Package(
         .target(
             name: "MCP",
             dependencies: mcpTargetDependencies,
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ]
+        ),
+        .target(
+            name: "MCPTool",
+            dependencies: ["MCP", "MCPMacros"],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ]
+        ),
+        .target(
+            name: "MCPPrompt",
+            dependencies: ["MCP", "MCPMacros"],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]

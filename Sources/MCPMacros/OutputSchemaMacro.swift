@@ -42,9 +42,9 @@ public struct OutputSchemaMacro: MemberMacro, ExtensionMacro {
             return []
         }
 
-        // Add StructuredOutput conformance
+        // Add StructuredOutput conformance (fully qualified for compatibility)
         let extensionDecl: DeclSyntax = """
-        extension \(type): StructuredOutput {}
+        extension \(type): MCP.StructuredOutput {}
         """
 
         guard let ext = extensionDecl.as(ExtensionDeclSyntax.self) else {

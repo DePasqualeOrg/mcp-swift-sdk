@@ -1,3 +1,30 @@
+// MCPPrompt - Macros and property wrappers for defining MCP prompts.
+//
+// Import this module alongside MCP when you need to define prompts:
+//
+//     import MCP
+//     import MCPPrompt
+//
+//     @Prompt
+//     struct CodeReviewPrompt {
+//         static let name = "code_review"
+//         static let description = "Review code for issues"
+//
+//         @Argument(description: "The code to review")
+//         var code: String
+//
+//         func render() -> [Prompt.Message] {
+//             [.user("Review this code:\n\(code)")]
+//         }
+//     }
+//
+// This separation allows using MCP types alongside other frameworks
+// that may have their own macros without naming collisions.
+
+import MCP
+
+// MARK: - ArgumentValue Protocol
+
 /// Protocol for types that can be used as prompt argument values.
 ///
 /// Per the MCP specification, prompt arguments are always strings.
@@ -28,6 +55,8 @@ extension String?: ArgumentValue {
         self = argumentString
     }
 }
+
+// MARK: - Argument Property Wrapper
 
 /// Property wrapper for MCP prompt arguments.
 ///
@@ -150,3 +179,27 @@ public extension Argument where Value: ExpressibleByNilLiteral {
         requiredOverride = required
     }
 }
+
+// MARK: - Prompt Macro
+
+/// Macro that generates `PromptSpec` conformance for a struct.
+///
+/// ## Basic Usage
+///
+/// ```swift
+/// @Prompt
+/// struct CodeReviewPrompt {
+///     static let name = "code_review"
+///     static let description = "Review code for issues"
+///
+///     @Argument(description: "The code to review")
+///     var code: String
+///
+///     func render() -> [Prompt.Message] {
+///         [.user("Review this code:\n\(code)")]
+///     }
+/// }
+/// ```
+@attached(member, names: named(promptDefinition), named(parse), named(init))
+@attached(extension, conformances: PromptSpec, Sendable)
+public macro Prompt() = #externalMacro(module: "MCPMacros", type: "PromptMacro")

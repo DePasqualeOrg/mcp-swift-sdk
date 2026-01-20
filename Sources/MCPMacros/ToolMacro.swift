@@ -149,9 +149,9 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
             seen.insert(annotation)
         }
 
-        // Add ToolSpec and Sendable conformance
+        // Add ToolSpec and Sendable conformance (fully qualified for compatibility with AI imports)
         let extensionDecl: DeclSyntax = """
-        extension \(type): ToolSpec, Sendable {}
+        extension \(type): MCP.ToolSpec, Sendable {}
         """
 
         guard let ext = extensionDecl.as(ExtensionDeclSyntax.self) else {
@@ -572,7 +572,7 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
         // For tools with no parameters, generate a simple parse method
         if toolInfo.parameters.isEmpty {
             return """
-            public static func parse(from arguments: [String: Value]?) throws -> Self {
+            public static func parse(from arguments: [String: MCP.Value]?) throws -> Self {
                 Self()
             }
             """
@@ -607,7 +607,7 @@ public struct ToolMacro: MemberMacro, ExtensionMacro {
         let statements = parseStatements.joined(separator: "\n    ")
 
         return """
-        public static func parse(from arguments: [String: Value]?) throws -> Self {
+        public static func parse(from arguments: [String: MCP.Value]?) throws -> Self {
             var _instance = Self()
             let _args = arguments ?? [:]
             \(raw: statements)

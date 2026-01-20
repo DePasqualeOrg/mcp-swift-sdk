@@ -1,116 +1,14 @@
-/// Property wrapper for MCP tool parameters.
-///
-/// The `@Parameter` property wrapper marks a property as a tool parameter and provides
-/// metadata for JSON Schema generation. The `@Tool` macro inspects these properties
-/// to generate the tool's `inputSchema`.
-///
-/// Example:
-/// ```swift
-/// @Tool
-/// struct CreateEvent {
-///     static let name = "create_event"
-///     static let description = "Create a calendar event"
-///
-///     // Required parameter (non-optional type)
-///     @Parameter(description: "The title of the event", maxLength: 500)
-///     var title: String
-///
-///     // Optional parameter
-///     @Parameter(description: "Location of the event")
-///     var location: String?
-///
-///     // Parameter with custom JSON key
-///     @Parameter(key: "start_date", description: "Start date in ISO 8601 format")
-///     var startDate: Date
-///
-///     // Parameter with default value (not required in schema)
-///     @Parameter(description: "Max events to return", minimum: 1, maximum: 100)
-///     var limit: Int = 25
-/// }
-/// ```
-@propertyWrapper
-public struct Parameter<Value: ParameterValue>: Sendable {
-    public var wrappedValue: Value
-
-    /// The JSON key used in the schema and argument parsing.
-    /// If nil, the Swift property name is used.
-    public let key: String?
-
-    /// A description of the parameter for the JSON Schema.
-    public let description: String?
-
-    // MARK: - Validation Constraints
-
-    /// Minimum length for string parameters.
-    public let minLength: Int?
-
-    /// Maximum length for string parameters.
-    public let maxLength: Int?
-
-    /// Minimum value for numeric parameters.
-    public let minimum: Double?
-
-    /// Maximum value for numeric parameters.
-    public let maximum: Double?
-
-    /// Creates a parameter with the specified metadata and constraints.
-    ///
-    /// - Parameters:
-    ///   - wrappedValue: The default value for this parameter.
-    ///   - key: The JSON key (defaults to property name).
-    ///   - description: A description of the parameter.
-    ///   - minLength: Minimum string length.
-    ///   - maxLength: Maximum string length.
-    ///   - minimum: Minimum numeric value.
-    ///   - maximum: Maximum numeric value.
-    public init(
-        wrappedValue: Value,
-        key: String? = nil,
-        description: String? = nil,
-        minLength: Int? = nil,
-        maxLength: Int? = nil,
-        minimum: Double? = nil,
-        maximum: Double? = nil
-    ) {
-        self.wrappedValue = wrappedValue
-        self.key = key
-        self.description = description
-        self.minLength = minLength
-        self.maxLength = maxLength
-        self.minimum = minimum
-        self.maximum = maximum
-    }
-}
-
-public extension Parameter where Value: ExpressibleByNilLiteral {
-    /// Creates an optional parameter with the specified metadata and constraints.
-    ///
-    /// Use this initializer for optional parameters where no default value is needed.
-    ///
-    /// - Parameters:
-    ///   - key: The JSON key (defaults to property name).
-    ///   - description: A description of the parameter.
-    ///   - minLength: Minimum string length.
-    ///   - maxLength: Maximum string length.
-    ///   - minimum: Minimum numeric value.
-    ///   - maximum: Maximum numeric value.
-    init(
-        key: String? = nil,
-        description: String? = nil,
-        minLength: Int? = nil,
-        maxLength: Int? = nil,
-        minimum: Double? = nil,
-        maximum: Double? = nil
-    ) {
-        wrappedValue = nil
-        self.key = key
-        self.description = description
-        self.minLength = minLength
-        self.maxLength = maxLength
-        self.minimum = minimum
-        self.maximum = maximum
-    }
-}
+// The @Parameter property wrapper is provided by the MCPTool module.
+// Import MCPTool alongside MCP to define tool parameters:
+//
+//     import MCP
+//     import MCPTool
+//
+//     @Tool
+//     struct MyTool {
+//         @Parameter(description: "Input value")
+//         var input: String
+//     }
 
 // MARK: - ParameterValue Protocol
 
@@ -186,37 +84,6 @@ public protocol ParameterValue: Sendable {
 public extension ParameterValue {
     /// Default: no additional properties.
     static var jsonSchemaProperties: [String: Value] { [:] }
-}
-
-public extension Parameter {
-    /// Creates a required parameter with the specified metadata and constraints.
-    ///
-    /// Use this initializer for required parameters without a default value.
-    /// The parameter's value will be set during parsing from tool arguments.
-    ///
-    /// - Parameters:
-    ///   - key: The JSON key (defaults to property name).
-    ///   - description: A description of the parameter.
-    ///   - minLength: Minimum string length.
-    ///   - maxLength: Maximum string length.
-    ///   - minimum: Minimum numeric value.
-    ///   - maximum: Maximum numeric value.
-    init(
-        key: String? = nil,
-        description: String? = nil,
-        minLength: Int? = nil,
-        maxLength: Int? = nil,
-        minimum: Double? = nil,
-        maximum: Double? = nil
-    ) {
-        wrappedValue = Value.placeholderValue
-        self.key = key
-        self.description = description
-        self.minLength = minLength
-        self.maxLength = maxLength
-        self.minimum = minimum
-        self.maximum = maximum
-    }
 }
 
 // MARK: - String Conformance

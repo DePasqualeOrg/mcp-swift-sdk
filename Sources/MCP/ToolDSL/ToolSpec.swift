@@ -88,60 +88,11 @@ public extension ToolSpec {
     static var annotations: [AnnotationOption] { [] }
 }
 
-/// Macro that generates `ToolSpec` conformance for a struct.
-///
-/// The macro generates:
-/// - `toolDefinition` with JSON Schema derived from `@Parameter` properties
-/// - `parse(from:)` for converting validated arguments to typed properties
-/// - `init()` empty initializer
-/// - `perform(context:)` bridging method (only if you write `perform()` without context)
-/// - `ToolSpec` protocol conformance
-///
-/// ## Basic Usage
-///
-/// Most tools don't need the `HandlerContext`. Just write `perform()` without parameters:
-///
-/// ```swift
-/// @Tool
-/// struct GetWeather {
-///     static let name = "get_weather"
-///     static let description = "Get weather for a city"
-///
-///     @Parameter(description: "City name")
-///     var city: String
-///
-///     @Parameter(description: "Country code")
-///     var country: String?
-///
-///     func perform() async throws -> String {
-///         "Weather for \(city): 22C, sunny"
-///     }
-/// }
-/// ```
-///
-/// ## Using HandlerContext
-///
-/// Include the `context` parameter when you need progress reporting, logging,
-/// or request metadata:
-///
-/// ```swift
-/// @Tool
-/// struct LongRunningTask {
-///     static let name = "long_task"
-///     static let description = "A task that reports progress"
-///
-///     @Parameter(description: "Number of steps")
-///     var steps: Int
-///
-///     func perform(context: HandlerContext) async throws -> String {
-///         for i in 0..<steps {
-///             try await context.reportProgress(progress: Double(i), total: Double(steps))
-///             try await doWork()
-///         }
-///         return "Completed \(steps) steps"
-///     }
-/// }
-/// ```
-@attached(member, names: named(toolDefinition), named(parse), named(init), named(perform))
-@attached(extension, conformances: ToolSpec, Sendable)
-public macro Tool() = #externalMacro(module: "MCPMacros", type: "ToolMacro")
+// The @Tool macro is provided by the MCPTool module.
+// Import MCPTool alongside MCP to define tools:
+//
+//     import MCP
+//     import MCPTool
+//
+//     @Tool
+//     struct MyTool { ... }

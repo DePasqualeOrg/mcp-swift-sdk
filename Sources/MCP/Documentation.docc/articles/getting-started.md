@@ -10,6 +10,7 @@ For other transports like stdio and HTTP, see the <doc:client-guide> and <doc:se
 
 ```swift
 import MCP
+import MCPTool
 
 // Define a tool
 @Tool
@@ -59,7 +60,7 @@ await server.close()
 
 ## How It Works
 
-1. **Define tools with `@Tool`**: The macro generates JSON Schema from your Swift types and handles argument parsing automatically.
+1. **Define tools with `@Tool`**: Import `MCPTool` to access the `@Tool` macro and `@Parameter` property wrapper. The macro generates JSON Schema from your Swift types and handles argument parsing automatically.
 
 2. **Create an ``MCPServer``**: The high-level server manages capabilities and request handlers for you.
 

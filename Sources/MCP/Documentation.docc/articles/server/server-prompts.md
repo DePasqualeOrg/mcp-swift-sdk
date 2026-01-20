@@ -12,7 +12,14 @@ The Swift SDK provides two approaches:
 
 ## Defining Prompts
 
-The `@Prompt` macro generates argument definitions and handles parsing automatically:
+The `@Prompt` macro generates argument definitions and handles parsing automatically. Import `MCPPrompt` to use the `@Prompt` macro and `@Argument` property wrapper:
+
+```swift
+import MCP
+import MCPPrompt
+```
+
+Here's a complete prompt definition:
 
 ```swift
 @Prompt

@@ -195,39 +195,11 @@ public func outputSchema(for outputType: Any.Type) -> Value? {
     (outputType as? any StructuredOutput.Type)?.schema
 }
 
-// MARK: - OutputSchema Macro
-
-/// Macro that generates `StructuredOutput` conformance for an `Encodable` struct.
-///
-/// The macro inspects the struct's properties and generates a JSON Schema
-/// that describes the output structure.
-///
-/// Example:
-/// ```swift
-/// @OutputSchema
-/// struct SearchResult: Sendable {
-///     let items: [String]
-///     let totalCount: Int
-///     let hasMore: Bool
-/// }
-/// ```
-///
-/// This generates:
-/// ```swift
-/// extension SearchResult: StructuredOutput {
-///     public static var schema: Value {
-///         .object([
-///             "type": .string("object"),
-///             "properties": .object([
-///                 "items": .object(["type": .string("array"), "items": .object(["type": .string("string")])]),
-///                 "totalCount": .object(["type": .string("integer")]),
-///                 "hasMore": .object(["type": .string("boolean")])
-///             ]),
-///             "required": .array([.string("items"), .string("totalCount"), .string("hasMore")])
-///         ])
-///     }
-/// }
-/// ```
-@attached(extension, conformances: StructuredOutput)
-@attached(member, names: named(schema))
-public macro OutputSchema() = #externalMacro(module: "MCPMacros", type: "OutputSchemaMacro")
+// The @OutputSchema macro is provided by the MCPTool module.
+// Import MCPTool alongside MCP to use it:
+//
+//     import MCP
+//     import MCPTool
+//
+//     @OutputSchema
+//     struct MyOutput { ... }
