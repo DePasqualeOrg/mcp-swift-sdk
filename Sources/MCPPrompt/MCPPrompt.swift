@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 // MCPPrompt - Macros and property wrappers for defining MCP prompts.
 //
 // Import this module alongside MCP when you need to define prompts:

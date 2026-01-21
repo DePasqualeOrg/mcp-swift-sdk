@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Options for annotating MCP tool behavior.
 ///
 /// Annotations provide hints about a tool's characteristics. They are used by MCP clients

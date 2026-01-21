@@ -1,3 +1,6 @@
+// Copyright © Anthony DePasquale
+// Copyright © Matt Zmuda
+
 /// A value constrained to the range 0.0 to 1.0, inclusive.
 ///
 /// `UnitInterval` represents a normalized value that is guaranteed to be within

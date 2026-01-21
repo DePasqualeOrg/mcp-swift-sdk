@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import Foundation
 
 /// Icon metadata for representing visual icons for tools, resources, prompts, and implementations.

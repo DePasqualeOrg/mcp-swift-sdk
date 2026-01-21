@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// MCP Conformance Test Client
 ///
 /// A client executable designed to be invoked by the MCP conformance test runner.

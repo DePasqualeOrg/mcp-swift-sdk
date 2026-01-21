@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 // MCPTool - Macros and property wrappers for defining MCP tools.
 //
 // Import this module alongside MCP when you need to define tools:

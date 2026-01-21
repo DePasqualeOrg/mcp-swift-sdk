@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import Testing
 
 @testable import MCP

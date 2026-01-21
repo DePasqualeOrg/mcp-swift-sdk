@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// A result builder for collecting prompt types.
 ///
 /// Use this builder to register multiple prompts at once with conditional logic.

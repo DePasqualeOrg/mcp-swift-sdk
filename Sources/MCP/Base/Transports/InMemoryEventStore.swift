@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import Foundation
 
 /// Simple in-memory implementation of the `EventStore` protocol for resumability support.

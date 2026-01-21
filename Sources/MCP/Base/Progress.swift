@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Progress tracking for long-running operations.
 ///
 /// Clients can include a `progressToken` in request metadata (`_meta.progressToken`)

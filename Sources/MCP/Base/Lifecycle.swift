@@ -1,3 +1,6 @@
+// Copyright © Anthony DePasquale
+// Copyright © Matt Zmuda
+
 /// The initialization phase MUST be the first interaction between client and server.
 /// During this phase, the client and server:
 /// - Establish protocol version compatibility

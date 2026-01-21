@@ -1,3 +1,6 @@
+// Copyright © Anthony DePasquale
+// Copyright © Matt Zmuda
+
 import Foundation
 
 /// Controls how the model uses tools during sampling.

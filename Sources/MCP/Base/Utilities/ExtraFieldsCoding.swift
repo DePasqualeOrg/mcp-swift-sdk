@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Utilities for encoding and decoding extra fields in Result types.
 ///
 /// These helpers support forward compatibility by preserving unknown fields

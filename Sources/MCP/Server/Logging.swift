@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Server logging capabilities.
 ///
 /// Servers can send log messages to clients, and clients can control

@@ -1,3 +1,6 @@
+// Copyright © Anthony DePasquale
+// Copyright © Matt Zmuda
+
 import Testing
 
 import class Foundation.JSONDecoder

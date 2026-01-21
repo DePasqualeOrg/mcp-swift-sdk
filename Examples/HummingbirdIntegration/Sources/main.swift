@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Hummingbird MCP Server Example
 ///
 /// This example demonstrates how to integrate an MCP server with the Hummingbird web framework.

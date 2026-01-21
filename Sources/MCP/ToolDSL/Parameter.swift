@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 // The @Parameter property wrapper is provided by the MCPTool module.
 // Import MCPTool alongside MCP to define tool parameters:
 //

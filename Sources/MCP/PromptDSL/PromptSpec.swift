@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// A prompt that can be rendered via MCP.
 ///
 /// Conformance is typically added by the `@Prompt` macro, which generates:

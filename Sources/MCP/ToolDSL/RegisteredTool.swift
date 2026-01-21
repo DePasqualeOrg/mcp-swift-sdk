@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// A registered tool providing enable/disable/remove operations.
 ///
 /// This is a lightweight, immutable struct that routes all mutations through

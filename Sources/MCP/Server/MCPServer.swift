@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// High-level MCP server providing ergonomic APIs for tools, resources, and prompts.
 ///
 /// `MCPServer` provides:

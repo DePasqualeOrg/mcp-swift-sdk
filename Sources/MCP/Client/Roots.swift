@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Roots represent filesystem directories that the client has access to.
 ///
 /// Servers can request the list of roots from clients to understand

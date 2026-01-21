@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import Foundation
 
 // Types extracted from HTTPClientTransport.swift

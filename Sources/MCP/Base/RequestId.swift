@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import struct Foundation.UUID
 
 /// A unique identifier for a request.

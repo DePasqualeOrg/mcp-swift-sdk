@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Transport options for running an MCPServer.
 ///
 /// Use this enum with `MCPServer.run(transport:)` to start a server

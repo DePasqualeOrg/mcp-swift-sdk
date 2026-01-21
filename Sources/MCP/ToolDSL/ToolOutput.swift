@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import Foundation
 
 /// A type that can be returned from an MCP tool's `perform(context:)` method.

@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import Foundation
 
 /// A registry for managing tools - both `@Tool`-decorated types and closure-based tools.

@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// A tool that can be invoked via MCP.
 ///
 /// Conformance is typically added by the `@Tool` macro, which generates:

@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import Logging
 import Testing
 

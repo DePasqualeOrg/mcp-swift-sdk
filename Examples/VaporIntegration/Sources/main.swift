@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Vapor MCP Server Example
 ///
 /// This example demonstrates how to integrate an MCP server with the Vapor web framework.

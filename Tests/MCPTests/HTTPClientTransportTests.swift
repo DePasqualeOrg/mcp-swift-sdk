@@ -1,3 +1,6 @@
+// Copyright © Anthony DePasquale
+// Copyright © Matt Zmuda
+
 @preconcurrency import Foundation
 import Logging
 import Testing

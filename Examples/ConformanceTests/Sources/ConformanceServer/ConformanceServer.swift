@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// MCP Conformance Test Server
 ///
 /// An MCP server implementing all the test fixtures required by the conformance test suite.

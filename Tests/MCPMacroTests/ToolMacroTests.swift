@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import SwiftSyntaxMacros
 import SwiftSyntaxMacrosTestSupport
 import XCTest

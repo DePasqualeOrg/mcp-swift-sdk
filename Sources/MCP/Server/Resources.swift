@@ -1,3 +1,6 @@
+// Copyright © Anthony DePasquale
+// Copyright © Matt Zmuda
+
 import Foundation
 
 /// The Model Context Protocol (MCP) provides a standardized way

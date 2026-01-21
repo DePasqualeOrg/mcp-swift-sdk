@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// HTTP header names used by the MCP protocol.
 public enum HTTPHeader {
     // MARK: - MCP Protocol Headers

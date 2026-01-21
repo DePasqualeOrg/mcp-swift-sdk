@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 /// Server extensions for high-level API support.
 ///
 /// These methods are primarily used by `MCPServer` but are public for

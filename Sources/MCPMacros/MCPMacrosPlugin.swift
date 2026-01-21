@@ -1,3 +1,5 @@
+// Copyright © Anthony DePasquale
+
 import SwiftCompilerPlugin
 import SwiftSyntaxMacros
 
