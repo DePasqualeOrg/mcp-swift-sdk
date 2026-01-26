@@ -196,6 +196,10 @@ public actor ToolRegistry {
     /// by the Server. It parses the arguments into a typed instance
     /// and executes the tool.
     ///
+    /// Tool lookup and validation happen on the actor. The actual execution
+    /// runs off the actor's serial executor so that multiple tool calls
+    /// can proceed concurrently.
+    ///
     /// - Parameters:
     ///   - name: The tool name to execute.
     ///   - arguments: The tool arguments.
@@ -208,23 +212,33 @@ public actor ToolRegistry {
         arguments: [String: Value]?,
         context: HandlerContext
     ) async throws -> CallTool.Result {
+        let entry = try resolveEntry(name)
+
+        // Run tool execution in a detached task so it runs on the global concurrent
+        // executor instead of the actor's serial executor. This allows multiple
+        // tool calls to proceed in parallel.
+        return try await Task.detached {
+            switch entry.kind {
+                case let .dsl(toolType):
+                    let instance = try toolType.parse(from: arguments)
+                    let output = try await instance.perform(context: context)
+                    return try output.toCallToolResult()
+
+                case let .closure(_, handler):
+                    return try await handler(arguments, context)
+            }
+        }.value
+    }
+
+    /// Looks up and validates a tool entry. Actor-isolated for safe dictionary access.
+    private func resolveEntry(_ name: String) throws -> ToolEntry {
         guard let entry = tools[name] else {
             throw MCPError.invalidParams("Unknown tool: \(name)")
         }
-
         guard entry.enabled else {
             throw MCPError.invalidParams("Tool '\(name)' is disabled")
         }
-
-        switch entry.kind {
-            case let .dsl(toolType):
-                let instance = try toolType.parse(from: arguments)
-                let output = try await instance.perform(context: context)
-                return try output.toCallToolResult()
-
-            case let .closure(_, handler):
-                return try await handler(arguments, context)
-        }
+        return entry
     }
 
     // MARK: - Tool Management (Internal)
