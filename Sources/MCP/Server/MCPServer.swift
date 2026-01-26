@@ -96,6 +96,21 @@ public actor MCPServer {
     /// Whether any prompts have been registered.
     private var hasPrompts = false
 
+    /// Active sessions for broadcasting notifications.
+    ///
+    /// MCPServer maintains its own session list so it can broadcast list-changed
+    /// notifications (tools, resources, prompts) to all connected clients when
+    /// registrations change. This is separate from HTTP-level session management
+    /// (e.g., `BasicHTTPSessionManager`), which tracks sessions by ID for request
+    /// routing. The two stay in sync via the `onDisconnect` callback set in
+    /// `createSession()`, and failed sessions are also pruned during broadcast.
+    ///
+    /// Neither the Python nor TypeScript reference SDKs provide built-in broadcasting.
+    /// In those SDKs, if tools are registered at runtime, application code must
+    /// manually iterate sessions and send notifications. This array enables MCPServer
+    /// to handle that automatically.
+    private var sessions: [Server] = []
+
     /// JSON Schema validator for tool input/output validation.
     private let validator: JSONSchemaValidator = DefaultJSONSchemaValidator()
 
@@ -194,7 +209,85 @@ public actor MCPServer {
         // Wire up handlers to shared registries
         await setUpSessionHandlers(session)
 
+        // Auto-remove session when its transport disconnects
+        await session.setOnDisconnect { [weak self] in
+            await self?.removeSession(session)
+        }
+
+        sessions.append(session)
+
         return session
+    }
+
+    /// Removes a session when its transport disconnects.
+    public func removeSession(_ session: Server) {
+        sessions.removeAll { $0 === session }
+    }
+
+    // MARK: - List Changed Notifications
+
+    /// Callback for `RegisteredTool` to notify all sessions when the tool list changes.
+    private var toolListChangedCallback: @Sendable () async -> Void {
+        { [weak self] in
+            await self?.notifyToolListChanged()
+        }
+    }
+
+    /// Callback for `RegisteredResource` to notify all sessions when the resource list changes.
+    private var resourceListChangedCallback: @Sendable () async -> Void {
+        { [weak self] in
+            await self?.notifyResourceListChanged()
+        }
+    }
+
+    /// Callback for `RegisteredPrompt` to notify all sessions when the prompt list changes.
+    private var promptListChangedCallback: @Sendable () async -> Void {
+        { [weak self] in
+            await self?.notifyPromptListChanged()
+        }
+    }
+
+    private func notifyToolListChanged() async {
+        await broadcastNotification(ToolListChangedNotification.message())
+    }
+
+    private func notifyResourceListChanged() async {
+        await broadcastNotification(ResourceListChangedNotification.message())
+    }
+
+    private func notifyPromptListChanged() async {
+        await broadcastNotification(PromptListChangedNotification.message())
+    }
+
+    /// Broadcasts a notification to all active sessions concurrently.
+    /// Sessions that fail to receive the notification (e.g., disconnected) are automatically removed.
+    private func broadcastNotification(_ notification: Message<some Notification>) async {
+        let currentSessions = sessions
+
+        let failedIDs = await withTaskGroup(
+            of: ObjectIdentifier?.self,
+            returning: Set<ObjectIdentifier>.self
+        ) { group in
+            for session in currentSessions {
+                group.addTask {
+                    do {
+                        try await session.notify(notification)
+                        return nil
+                    } catch {
+                        return ObjectIdentifier(session)
+                    }
+                }
+            }
+            var failed = Set<ObjectIdentifier>()
+            for await id in group {
+                if let id { failed.insert(id) }
+            }
+            return failed
+        }
+
+        if !failedIDs.isEmpty {
+            sessions.removeAll { failedIDs.contains(ObjectIdentifier($0)) }
+        }
     }
 
     /// Sets up request handlers on a session server, delegating to shared registries.
@@ -403,12 +496,14 @@ public extension MCPServer {
     /// - Throws: `MCPError.invalidParams` if any tool name is already registered.
     @discardableResult
     func register(@ToolBuilder tools: () -> [any ToolSpec.Type]) async throws -> [RegisteredTool] {
+        let onListChanged = toolListChangedCallback
         var registeredTools: [RegisteredTool] = []
         for tool in tools() {
-            let registered = try await toolRegistry.register(tool)
+            let registered = try await toolRegistry.register(tool, onListChanged: onListChanged)
             registeredTools.append(registered)
         }
         hasTools = true
+        await notifyToolListChanged()
         return registeredTools
     }
 
@@ -426,8 +521,10 @@ public extension MCPServer {
     /// - Throws: `MCPError.invalidParams` if a tool with the same name is already registered.
     @discardableResult
     func register(_ tool: (some ToolSpec).Type) async throws -> RegisteredTool {
-        let registered = try await toolRegistry.register(tool)
+        let onListChanged = toolListChangedCallback
+        let registered = try await toolRegistry.register(tool, onListChanged: onListChanged)
         hasTools = true
+        await notifyToolListChanged()
         return registered
     }
 
@@ -487,6 +584,7 @@ public extension MCPServer {
         annotations: [AnnotationOption] = [],
         handler: @escaping @Sendable (Input, HandlerContext) async throws -> Output
     ) async throws -> RegisteredTool {
+        let onListChanged = toolListChangedCallback
         let registered = try await toolRegistry.registerClosure(
             name: name,
             description: description,
@@ -494,9 +592,11 @@ public extension MCPServer {
             inputType: inputType,
             outputSchema: outputSchema(for: Output.self),
             annotations: annotations,
+            onListChanged: onListChanged,
             handler: handler
         )
         hasTools = true
+        await notifyToolListChanged()
         return registered
     }
 
@@ -513,13 +613,16 @@ public extension MCPServer {
         annotations: [AnnotationOption] = [],
         handler: @escaping @Sendable (HandlerContext) async throws -> some ToolOutput
     ) async throws -> RegisteredTool {
+        let onListChanged = toolListChangedCallback
         let registered = try await toolRegistry.registerClosure(
             name: name,
             description: description,
             annotations: annotations,
+            onListChanged: onListChanged,
             handler: handler
         )
         hasTools = true
+        await notifyToolListChanged()
         return registered
     }
 }
@@ -554,9 +657,11 @@ public extension MCPServer {
             name: name,
             description: description,
             mimeType: mimeType,
+            onListChanged: resourceListChangedCallback,
             read: read
         )
         hasResources = true
+        await notifyResourceListChanged()
         return registered
     }
 
@@ -591,9 +696,11 @@ public extension MCPServer {
             description: description,
             mimeType: mimeType,
             list: list,
+            onListChanged: resourceListChangedCallback,
             read: read
         )
         hasResources = true
+        await notifyResourceListChanged()
         return registered
     }
 }
@@ -620,12 +727,14 @@ public extension MCPServer {
     /// - Throws: `MCPError.invalidParams` if any prompt name is already registered.
     @discardableResult
     func register(@PromptBuilder prompts: () -> [any PromptSpec.Type]) async throws -> [RegisteredPrompt] {
+        let onListChanged = promptListChangedCallback
         var registeredPrompts: [RegisteredPrompt] = []
         for prompt in prompts() {
-            let registered = try await promptRegistry.register(prompt)
+            let registered = try await promptRegistry.register(prompt, onListChanged: onListChanged)
             registeredPrompts.append(registered)
         }
         hasPrompts = true
+        await notifyPromptListChanged()
         return registeredPrompts
     }
 
@@ -643,8 +752,9 @@ public extension MCPServer {
     /// - Throws: `MCPError.invalidParams` if a prompt with the same name is already registered.
     @discardableResult
     func register(_ prompt: (some PromptSpec).Type) async throws -> RegisteredPrompt {
-        let registered = try await promptRegistry.register(prompt)
+        let registered = try await promptRegistry.register(prompt, onListChanged: promptListChangedCallback)
         hasPrompts = true
+        await notifyPromptListChanged()
         return registered
     }
 
@@ -706,9 +816,11 @@ public extension MCPServer {
             title: title,
             description: description,
             arguments: arguments,
+            onListChanged: promptListChangedCallback,
             handler: handler
         )
         hasPrompts = true
+        await notifyPromptListChanged()
         return registered
     }
 

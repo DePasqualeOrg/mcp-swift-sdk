@@ -803,6 +803,14 @@ public actor Server {
     let serverInfo: Server.Info
     /// The server connection
     var connection: (any Transport)?
+    /// Callback invoked when the server's message loop exits (transport disconnected or stopped).
+    private var onDisconnect: (@Sendable () async -> Void)?
+
+    /// Sets a callback to be invoked when the server's message loop exits.
+    public func setOnDisconnect(_ handler: (@Sendable () async -> Void)?) {
+        onDisconnect = handler
+    }
+
     /// The server logger
     var logger: Logger? {
         get async {
@@ -1036,6 +1044,7 @@ public actor Server {
                 )
             }
             await logger?.debug("Server finished", metadata: [:])
+            await onDisconnect?()
         }
     }
 
