@@ -125,11 +125,16 @@ public actor MCPClient {
         onStateChanged = callback
     }
 
-    /// Called after reconnection when tools have been refreshed.
+    /// Called when the server's tool list changes.
+    ///
+    /// This fires in two situations:
+    /// - The server sends a ``ToolListChangedNotification``
+    /// - Tools are refreshed after a successful reconnection
+    ///
     /// Provides the updated tool list from the server.
     public var onToolsChanged: (@Sendable ([Tool]) async -> Void)?
 
-    /// Sets the callback invoked when tools have been refreshed after reconnection.
+    /// Sets the callback invoked when the server's tool list changes.
     public func setOnToolsChanged(_ callback: (@Sendable ([Tool]) async -> Void)?) {
         onToolsChanged = callback
     }
@@ -146,6 +151,10 @@ public actor MCPClient {
     }
 
     // MARK: - Private State
+
+    /// Whether the ToolListChangedNotification handler has been registered on the underlying client.
+    /// Guarded to prevent duplicate handlers when `connect()` is called multiple times.
+    private var toolListChangedHandlerRegistered: Bool = false
 
     /// Factory for creating fresh transport instances on reconnection.
     private var transportFactory: (@Sendable () async throws -> any Transport)?
@@ -212,6 +221,18 @@ public actor MCPClient {
         // Clean up any existing connection before establishing a new one
         if state != .disconnected {
             await disconnect()
+        }
+
+        // Register ToolListChangedNotification handler once, before first connection.
+        // When the server signals that its tool list has changed, we refresh the list
+        // and surface the update through the same onToolsChanged callback used after
+        // reconnection — so consumers get a single callback for both cases.
+        if !toolListChangedHandlerRegistered {
+            toolListChangedHandlerRegistered = true
+            await client.onNotification(ToolListChangedNotification.self) { [weak self] _ in
+                guard let self else { return }
+                await refreshToolsAndNotify()
+            }
         }
 
         transportFactory = transport
@@ -446,7 +467,7 @@ public actor MCPClient {
                 startHealthCheckIfNeeded()
 
                 // Refresh tool cache and notify observers
-                await refreshToolsAfterReconnection()
+                await refreshToolsAndNotify()
 
                 // Signal event stream is back after full reconnection
                 await onEventStreamStatusChanged?(.connected)
@@ -547,13 +568,16 @@ public actor MCPClient {
         }
     }
 
-    /// Refreshes tool cache after reconnection and notifies observers.
-    private func refreshToolsAfterReconnection() async {
+    /// Refreshes the tool list from the server and notifies observers via `onToolsChanged`.
+    ///
+    /// Called after reconnection and when the server sends a `ToolListChangedNotification`.
+    private func refreshToolsAndNotify() async {
+        guard state == .connected else { return }
         do {
             let result = try await client.listTools()
             await onToolsChanged?(result.tools)
         } catch {
-            logger.warning("Failed to refresh tools after reconnection", metadata: [
+            logger.warning("Failed to refresh tools", metadata: [
                 "error": "\(error)",
             ])
         }

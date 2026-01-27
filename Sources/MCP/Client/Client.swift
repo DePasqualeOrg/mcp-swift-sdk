@@ -415,6 +415,18 @@ public actor Client {
     /// The task for the message handling loop
     var task: Task<Void, Never>?
 
+    /// Continuation for the notification dispatch stream.
+    ///
+    /// User-registered notification handlers are dispatched through this stream
+    /// rather than being awaited inline in the message loop. This prevents deadlocks
+    /// when a handler makes a request back to the server (the message loop must remain
+    /// free to process the response). Matches the TypeScript SDK which dispatches
+    /// notification handlers via `Promise.resolve().then()`.
+    var notificationContinuation: AsyncStream<Message<AnyNotification>>.Continuation?
+
+    /// The task that consumes the notification dispatch stream and invokes handlers.
+    var notificationTask: Task<Void, Never>?
+
     // MARK: - Capability Auto-Detection State
 
     /// Configuration for sampling handler, used to build capabilities at connect time.
@@ -713,6 +725,32 @@ public actor Client {
             "Client connected", metadata: ["name": "\(name)", "version": "\(version)"]
         )
 
+        // Set up notification dispatch stream.
+        // Clean up previous stream/task if connect() is called again (reconnection).
+        notificationContinuation?.finish()
+        notificationTask?.cancel()
+
+        let (notificationStream, notifContinuation) = AsyncStream<Message<AnyNotification>>.makeStream()
+        notificationContinuation = notifContinuation
+        notificationTask = Task {
+            for await notification in notificationStream {
+                let handlers = notificationHandlers[notification.method] ?? []
+                for handler in handlers {
+                    do {
+                        try await handler(notification)
+                    } catch {
+                        await logger?.error(
+                            "Error handling notification",
+                            metadata: [
+                                "method": "\(notification.method)",
+                                "error": "\(error)",
+                            ]
+                        )
+                    }
+                }
+            }
+        }
+
         // Start message handling loop
         //
         // The receive loop:
@@ -819,12 +857,18 @@ public actor Client {
 
         // Part 1: Inside actor - Grab state and clear internal references
         let taskToCancel = task
+        let notificationTaskToCancel = notificationTask
         let connectionToDisconnect = connection
         let pendingRequestsToCancel = pendingRequests
 
         task = nil
+        notificationTask = nil
         connection = nil
         pendingRequests = [:] // Use empty dictionary literal
+
+        // End the notification stream so the processing task can exit
+        notificationContinuation?.finish()
+        notificationContinuation = nil
 
         // Clear all progress-related state
         progressCallbacks.removeAll()
@@ -840,8 +884,9 @@ public actor Client {
         }
         await logger?.debug("Pending requests cancelled.")
 
-        // Cancel the task
+        // Cancel tasks
         taskToCancel?.cancel()
+        notificationTaskToCancel?.cancel()
         await logger?.debug("Message loop task cancellation requested.")
 
         // Disconnect the transport *before* awaiting the task
@@ -853,9 +898,11 @@ public actor Client {
             await logger?.debug("No active transport connection to disconnect.")
         }
 
-        // Await the task completion *after* transport disconnect
+        // Await task completion *after* transport disconnect
         await taskToCancel?.value
         await logger?.debug("Client message loop task finished.")
+        await notificationTaskToCancel?.value
+        await logger?.debug("Notification processing task finished.")
 
         await logger?.debug("Client disconnect complete.")
     }

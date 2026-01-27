@@ -150,23 +150,10 @@ extension Client {
             await handleTaskStatusNotification(message)
         }
 
-        // Find notification handlers for this method
-        guard let handlers = notificationHandlers[message.method] else { return }
-
-        // Convert notification parameters to concrete type and call handlers
-        for handler in handlers {
-            do {
-                try await handler(message)
-            } catch {
-                await logger?.error(
-                    "Error handling notification",
-                    metadata: [
-                        "method": "\(message.method)",
-                        "error": "\(error)",
-                    ]
-                )
-            }
-        }
+        // Dispatch to the notification processing task.
+        // Handlers are invoked on a separate task so they don't block the message loop,
+        // which must remain free to process responses to any requests the handlers make.
+        notificationContinuation?.yield(message)
     }
 
     /// Handle a progress notification by invoking any registered callback.
