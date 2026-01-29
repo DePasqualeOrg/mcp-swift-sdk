@@ -232,8 +232,17 @@ extension Server {
             }
         }
 
-        // Find handler for method name
-        guard let handler = registeredHandlers.methodHandlers[request.method] else {
+        // Find handler for method name (try specific handler first, then fallback)
+        let handler: RequestHandlerBox
+        if let specificHandler = registeredHandlers.methodHandlers[request.method] {
+            handler = specificHandler
+        } else if let fallbackHandler = registeredHandlers.fallbackRequestHandler {
+            logger?.debug(
+                "Using fallback handler for request",
+                metadata: ["method": "\(request.method)"]
+            )
+            handler = fallbackHandler
+        } else {
             let error = MCPError.methodNotFound("Unknown method: \(request.method)")
             let response = AnyMethod.response(id: request.id, error: error)
 
@@ -363,21 +372,35 @@ extension Server {
             }
         }
 
-        // Find notification handlers for this method
-        guard let handlers = registeredHandlers.notificationHandlers[message.method] else { return }
+        // Find notification handlers for this method (try specific handlers first, then fallback)
+        let handlers = registeredHandlers.notificationHandlers[message.method] ?? []
 
-        // Convert notification parameters to concrete type and call handlers
-        for handler in handlers {
+        // Use fallback handler if no specific handlers registered
+        if handlers.isEmpty, let fallbackHandler = registeredHandlers.fallbackNotificationHandler {
             do {
-                try await handler(message)
+                try await fallbackHandler(message)
             } catch {
                 logger?.error(
-                    "Error handling notification",
+                    "Error in fallback notification handler",
                     metadata: [
                         "method": "\(message.method)",
                         "error": "\(error)",
                     ]
                 )
+            }
+        } else {
+            for handler in handlers {
+                do {
+                    try await handler(message)
+                } catch {
+                    logger?.error(
+                        "Error handling notification",
+                        metadata: [
+                            "method": "\(message.method)",
+                            "error": "\(error)",
+                        ]
+                    )
+                }
             }
         }
     }

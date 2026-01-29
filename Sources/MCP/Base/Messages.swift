@@ -235,6 +235,23 @@ final class TypedRequestHandler<M: Method>: RequestHandlerBox, @unchecked Sendab
     }
 }
 
+/// A request handler that works directly with type-erased requests.
+///
+/// Used for fallback handlers that need to handle any request method.
+/// See `RequestHandlerBox` for why `@unchecked Sendable` is safe here.
+final class AnyRequestHandler: RequestHandlerBox, @unchecked Sendable {
+    private let _handle: @Sendable (AnyRequest, RequestHandlerContext) async throws -> AnyResponse
+
+    init(_ handler: @escaping @Sendable (AnyRequest, RequestHandlerContext) async throws -> AnyResponse) {
+        _handle = handler
+        super.init()
+    }
+
+    override func callAsFunction(_ request: AnyRequest, context: RequestHandlerContext) async throws -> AnyResponse {
+        try await _handle(request, context)
+    }
+}
+
 // MARK: -
 
 /// A response message.
@@ -517,5 +534,39 @@ final class TypedClientRequestHandler<M: Method>: ClientRequestHandlerBox, @unch
             // Sanitize non-MCP errors to avoid leaking internal details
             return Response(id: typedRequest.id, error: MCPError.internalError("An internal error occurred"))
         }
+    }
+}
+
+/// A client request handler that works directly with type-erased requests.
+///
+/// Used for fallback handlers that need to handle any request method.
+/// See `ClientRequestHandlerBox` for why `@unchecked Sendable` is safe here.
+final class AnyClientRequestHandler: ClientRequestHandlerBox, @unchecked Sendable {
+    private let _handle: @Sendable (AnyRequest, RequestHandlerContext) async throws -> AnyResponse
+
+    init(_ handler: @escaping @Sendable (AnyRequest, RequestHandlerContext) async throws -> AnyResponse) {
+        _handle = handler
+        super.init()
+    }
+
+    override func callAsFunction(_ request: AnyRequest, context: RequestHandlerContext) async throws -> AnyResponse {
+        try await _handle(request, context)
+    }
+}
+
+/// A notification handler that works directly with type-erased notifications.
+///
+/// Used for fallback handlers that need to handle any notification method.
+/// See `NotificationHandlerBox` for why `@unchecked Sendable` is safe here.
+final class AnyNotificationHandler: NotificationHandlerBox, @unchecked Sendable {
+    private let _handle: @Sendable (Message<AnyNotification>) async throws -> Void
+
+    init(_ handler: @escaping @Sendable (Message<AnyNotification>) async throws -> Void) {
+        _handle = handler
+        super.init()
+    }
+
+    override func callAsFunction(_ notification: Message<AnyNotification>) async throws {
+        try await _handle(notification)
     }
 }

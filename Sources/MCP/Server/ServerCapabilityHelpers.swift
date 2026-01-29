@@ -42,7 +42,11 @@ enum ServerCapabilityHelpers {
         return capabilities
     }
 
-    /// Validate that advertised capabilities have handlers registered.
+    /// Validate that advertised capabilities have handlers registered, and vice versa.
+    ///
+    /// This performs two-way validation:
+    /// 1. Capabilities advertised without handlers (client may call methods that will fail)
+    /// 2. Handlers registered without capabilities (client won't know the feature is available)
     ///
     /// These are intentionally warnings (not errors) to support legitimate edge cases:
     /// - Dynamic registration: capabilities advertised before handlers are registered
@@ -71,6 +75,24 @@ enum ServerCapabilityHelpers {
         if capabilities.prompts != nil, handlers.methodHandlers[GetPrompt.name] == nil {
             logger?.warning(
                 "Prompts capability will be advertised but no prompts/get handler is registered"
+            )
+        }
+
+        // Check for handlers registered without capabilities (reverse validation)
+        // These handlers exist but clients won't know the feature is available
+        if handlers.methodHandlers[CallTool.name] != nil, capabilities.tools == nil {
+            logger?.warning(
+                "Tools handler registered but capability not advertised - clients won't discover tools"
+            )
+        }
+        if handlers.methodHandlers[ReadResource.name] != nil, capabilities.resources == nil {
+            logger?.warning(
+                "Resources handler registered but capability not advertised - clients won't discover resources"
+            )
+        }
+        if handlers.methodHandlers[GetPrompt.name] != nil, capabilities.prompts == nil {
+            logger?.warning(
+                "Prompts handler registered but capability not advertised - clients won't discover prompts"
             )
         }
     }

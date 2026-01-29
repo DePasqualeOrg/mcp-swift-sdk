@@ -24,6 +24,19 @@ struct ServerHandlerRegistry: Sendable {
     /// Multiple handlers can be registered for the same notification type.
     var notificationHandlers: [String: [NotificationHandlerBox]] = [:]
 
+    /// Fallback handler for requests with no registered handler.
+    ///
+    /// If set, this handler is called for any incoming request that doesn't have
+    /// a specific handler registered. Useful for debugging, logging unknown methods,
+    /// or forward-compatibility with new MCP features.
+    var fallbackRequestHandler: RequestHandlerBox?
+
+    /// Fallback handler for notifications with no registered handler.
+    ///
+    /// If set, this handler is called for any incoming notification that doesn't have
+    /// a specific handler registered. Useful for debugging or logging unknown notifications.
+    var fallbackNotificationHandler: NotificationHandlerBox?
+
     /// In-flight request handler Tasks, tracked by request ID.
     /// Used for protocol-level cancellation when CancelledNotification is received.
     var inFlightHandlerTasks: [RequestId: Task<Void, Never>] = [:]
@@ -486,6 +499,56 @@ public actor Server: ProtocolLayer {
         handler: @escaping @Sendable (Message<N>) async throws -> Void
     ) {
         registeredHandlers.notificationHandlers[N.name, default: []].append(TypedNotificationHandler(handler))
+    }
+
+    // MARK: - Fallback Handlers
+
+    /// Set a fallback handler for requests with no specific handler registered.
+    ///
+    /// This handler is called for any incoming client request that doesn't have
+    /// a specific handler registered. Useful for:
+    /// - Debugging: log all unhandled requests
+    /// - Forward-compatibility: handle new MCP methods without code changes
+    /// - Testing: capture requests for verification
+    ///
+    /// - Parameter handler: The fallback handler. Receives the raw request and context,
+    ///   and should return a response. If the handler throws, the error is converted
+    ///   to an error response.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// await server.setFallbackRequestHandler { request, context in
+    ///     print("Unhandled request: \(request.method)")
+    ///     throw MCPError.methodNotFound("Unknown method: \(request.method)")
+    /// }
+    /// ```
+    public func setFallbackRequestHandler(
+        _ handler: @escaping @Sendable (Request<AnyMethod>, RequestHandlerContext) async throws -> Response<AnyMethod>
+    ) {
+        registeredHandlers.fallbackRequestHandler = AnyRequestHandler(handler)
+    }
+
+    /// Set a fallback handler for notifications with no specific handler registered.
+    ///
+    /// This handler is called for any incoming client notification that doesn't have
+    /// a specific handler registered. Useful for:
+    /// - Debugging: log all unhandled notifications
+    /// - Forward-compatibility: observe new MCP notifications without code changes
+    ///
+    /// - Parameter handler: The fallback handler. Receives the raw notification.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// await server.setFallbackNotificationHandler { notification in
+    ///     print("Unhandled notification: \(notification.method)")
+    /// }
+    /// ```
+    public func setFallbackNotificationHandler(
+        _ handler: @escaping @Sendable (Message<AnyNotification>) async throws -> Void
+    ) {
+        registeredHandlers.fallbackNotificationHandler = AnyNotificationHandler(handler)
     }
 
     /// Register a response router to intercept responses before normal handling.

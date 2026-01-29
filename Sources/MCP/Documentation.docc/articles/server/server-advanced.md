@@ -398,6 +398,52 @@ await server.withRequestHandler(CallTool.self) { params, context in
 }
 ```
 
+## Fallback Handlers
+
+Fallback handlers intercept requests and notifications that don't have a specific handler registered.
+
+### Fallback Request Handler
+
+Handle client requests that have no specific handler:
+
+```swift
+await server.setFallbackRequestHandler { request, context in
+    print("Unhandled request: \(request.method)")
+    // Return a response or throw an error
+    throw MCPError.methodNotFound("Unknown method: \(request.method)")
+}
+```
+
+You can also return a valid response from the fallback handler:
+
+```swift
+await server.setFallbackRequestHandler { request, context in
+    // Handle unknown methods gracefully
+    if request.method.hasPrefix("custom/") {
+        return Response<AnyMethod>(id: request.id, result: .object(["handled": .bool(true)]))
+    }
+    throw MCPError.methodNotFound("Unknown method: \(request.method)")
+}
+```
+
+### Fallback Notification Handler
+
+Observe client notifications that have no specific handler:
+
+```swift
+await server.setFallbackNotificationHandler { notification in
+    print("Unhandled notification: \(notification.method)")
+}
+```
+
+Fallback handlers are useful for:
+- **Debugging**: Log all requests/notifications your handlers don't cover
+- **Forward-compatibility**: Handle new MCP methods without code changes
+- **Testing**: Capture requests/notifications for verification
+- **Protocol extensions**: Provide generic handling for custom method namespaces
+
+> Important: Specific handlers always take precedence over fallback handlers. If you register a handler for a method via `withRequestHandler(_:handler:)` or `onNotification(_:handler:)`, the fallback handler won't be called for that method.
+
 ## Graceful Shutdown
 
 ```swift

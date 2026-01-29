@@ -94,6 +94,49 @@ await server.withRequestHandler(CallTool.self) { params, _ in
 }
 ```
 
+## Fallback Handlers
+
+Use fallback handlers to intercept unhandled requests and notifications for debugging.
+
+### Server Fallback Handlers
+
+Log all unhandled client requests:
+
+```swift
+await server.setFallbackRequestHandler { request, context in
+    print("Unhandled request: \(request.method)")
+    print("  Params: \(request.params)")
+    throw MCPError.methodNotFound("No handler for: \(request.method)")
+}
+
+await server.setFallbackNotificationHandler { notification in
+    print("Unhandled notification: \(notification.method)")
+}
+```
+
+### Client Fallback Handlers
+
+Log all unhandled server requests and notifications:
+
+```swift
+// Must be set before connect()
+await client.setFallbackRequestHandler { request, context in
+    print("Unhandled server request: \(request.method)")
+    throw MCPError.methodNotFound("Client has no handler for: \(request.method)")
+}
+
+await client.setFallbackNotificationHandler { notification in
+    print("Unhandled server notification: \(notification.method)")
+}
+
+try await client.connect(transport: transport)
+```
+
+Fallback handlers are useful for:
+- **Debugging**: See all requests/notifications your handlers don't cover
+- **Forward-compatibility**: Handle new MCP methods without code changes
+- **Testing**: Capture and verify request/notification patterns
+
 ## Protocol Inspection
 
 ### Raw Message Logging

@@ -83,6 +83,24 @@ struct ClientHandlerRegistry: Sendable {
     /// Tasks capability configuration (set via withTasksCapability).
     var tasksConfig: Client.Capabilities.Tasks?
 
+    // MARK: - Fallback Handlers
+
+    /// Fallback handler for requests with no registered handler.
+    ///
+    /// If set, this handler is called for any incoming request that doesn't have
+    /// a specific handler registered. Useful for debugging, logging unknown methods,
+    /// or forward-compatibility with new MCP features.
+    ///
+    /// The handler receives the raw request and should return a response.
+    /// If it throws, the error is converted to an error response.
+    var fallbackRequestHandler: ClientRequestHandlerBox?
+
+    /// Fallback handler for notifications with no registered handler.
+    ///
+    /// If set, this handler is called for any incoming notification that doesn't have
+    /// a specific handler registered. Useful for debugging or logging unknown notifications.
+    var fallbackNotificationHandler: NotificationHandlerBox?
+
     // MARK: - State
 
     /// Whether handler registration is locked (after connection).
@@ -476,17 +494,33 @@ public actor Client: ProtocolLayer {
         notificationTask = Task {
             for await notification in notificationStream {
                 let handlers = registeredHandlers.notificationHandlers[notification.method] ?? []
-                for handler in handlers {
+
+                // Use fallback handler if no specific handlers registered
+                if handlers.isEmpty, let fallbackHandler = registeredHandlers.fallbackNotificationHandler {
                     do {
-                        try await handler(notification)
+                        try await fallbackHandler(notification)
                     } catch {
                         logger?.error(
-                            "Error handling notification",
+                            "Error in fallback notification handler",
                             metadata: [
                                 "method": "\(notification.method)",
                                 "error": "\(error)",
                             ]
                         )
+                    }
+                } else {
+                    for handler in handlers {
+                        do {
+                            try await handler(notification)
+                        } catch {
+                            logger?.error(
+                                "Error handling notification",
+                                metadata: [
+                                    "method": "\(notification.method)",
+                                    "error": "\(error)",
+                                ]
+                            )
+                        }
                     }
                 }
             }

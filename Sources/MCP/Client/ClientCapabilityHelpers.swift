@@ -44,7 +44,12 @@ enum ClientCapabilityHelpers {
         return capabilities
     }
 
-    /// Validate that advertised capabilities have handlers registered.
+    /// Validate that advertised capabilities have handlers registered, and vice versa.
+    ///
+    /// This performs two-way validation:
+    /// 1. Capabilities advertised without handlers (handler won't be invoked by server)
+    /// 2. Handlers registered without capabilities (handler won't be invoked because
+    ///    capability isn't advertised)
     ///
     /// These are intentionally warnings (not errors) to support legitimate edge cases:
     /// - Testing: advertise capabilities to test server behavior without implementing handlers
@@ -74,6 +79,24 @@ enum ClientCapabilityHelpers {
         if capabilities.roots != nil, handlers.requestHandlers[ListRoots.name] == nil {
             logger?.warning(
                 "Roots capability will be advertised but no handler is registered"
+            )
+        }
+
+        // Check for handlers registered without capabilities (reverse validation)
+        // These handlers will never be invoked because the capability isn't advertised
+        if handlers.requestHandlers[ClientSamplingRequest.name] != nil, capabilities.sampling == nil {
+            logger?.warning(
+                "Sampling handler registered but capability not advertised - handler won't be invoked"
+            )
+        }
+        if handlers.requestHandlers[Elicit.name] != nil, capabilities.elicitation == nil {
+            logger?.warning(
+                "Elicitation handler registered but capability not advertised - handler won't be invoked"
+            )
+        }
+        if handlers.requestHandlers[ListRoots.name] != nil, capabilities.roots == nil {
+            logger?.warning(
+                "Roots handler registered but capability not advertised - handler won't be invoked"
             )
         }
     }

@@ -209,6 +209,39 @@ let results = try await withThrowingTaskGroup(of: String.self) { group in
 
 Notification handlers registered via ``Client/onNotification(_:handler:)`` are dispatched outside the message loop. This means handlers can safely make requests back to the server (such as calling `listTools()` in response to a `ToolListChangedNotification`) without deadlocking the message processing pipeline.
 
+## Fallback Handlers
+
+Fallback handlers intercept requests and notifications that don't have a specific handler registered. They must be set before calling `connect()`.
+
+### Fallback Request Handler
+
+Handle server-initiated requests that have no specific handler:
+
+```swift
+await client.setFallbackRequestHandler { request, context in
+    print("Unhandled server request: \(request.method)")
+    // Return a response or throw an error
+    throw MCPError.methodNotFound("Client has no handler for: \(request.method)")
+}
+```
+
+### Fallback Notification Handler
+
+Observe server notifications that have no specific handler:
+
+```swift
+await client.setFallbackNotificationHandler { notification in
+    print("Unhandled notification: \(notification.method)")
+}
+```
+
+Fallback handlers are useful for:
+- **Debugging**: Log all requests/notifications your handlers don't cover
+- **Forward-compatibility**: Handle new MCP methods without code changes
+- **Testing**: Capture requests/notifications for verification
+
+> Important: Specific handlers always take precedence over fallback handlers. If you register a handler for a method via `onNotification(_:handler:)` or `withRequestHandler(_:handler:)`, the fallback handler won't be called for that method.
+
 ## See Also
 
 - <doc:client-setup>

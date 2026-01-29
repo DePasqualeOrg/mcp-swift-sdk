@@ -13,6 +13,70 @@ public extension Client {
         registeredHandlers.notificationHandlers[N.name, default: []].append(TypedNotificationHandler(handler))
     }
 
+    // MARK: - Fallback Handlers
+
+    /// Set a fallback handler for requests with no specific handler registered.
+    ///
+    /// This handler is called for any incoming server request that doesn't have
+    /// a specific handler registered. Useful for:
+    /// - Debugging: log all unhandled requests
+    /// - Forward-compatibility: handle new MCP methods without code changes
+    /// - Testing: capture requests for verification
+    ///
+    /// Must be called before `connect()`.
+    ///
+    /// - Parameter handler: The fallback handler. Receives the raw request and context,
+    ///   and should return a response. If the handler throws, the error is converted
+    ///   to an error response.
+    /// - Precondition: Must not be called after `connect()`.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// await client.setFallbackRequestHandler { request, context in
+    ///     print("Unhandled request: \(request.method)")
+    ///     throw MCPError.methodNotFound("Client has no handler for: \(request.method)")
+    /// }
+    /// ```
+    func setFallbackRequestHandler(
+        _ handler: @escaping @Sendable (Request<AnyMethod>, RequestHandlerContext) async throws -> Response<AnyMethod>
+    ) {
+        precondition(
+            !registeredHandlers.isLocked,
+            "Cannot register handlers after connect(). Register all handlers before calling connect()."
+        )
+        registeredHandlers.fallbackRequestHandler = AnyClientRequestHandler(handler)
+    }
+
+    /// Set a fallback handler for notifications with no specific handler registered.
+    ///
+    /// This handler is called for any incoming server notification that doesn't have
+    /// a specific handler registered. Useful for:
+    /// - Debugging: log all unhandled notifications
+    /// - Forward-compatibility: observe new MCP notifications without code changes
+    ///
+    /// Must be called before `connect()`.
+    ///
+    /// - Parameter handler: The fallback handler. Receives the raw notification.
+    /// - Precondition: Must not be called after `connect()`.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// await client.setFallbackNotificationHandler { notification in
+    ///     print("Unhandled notification: \(notification.method)")
+    /// }
+    /// ```
+    func setFallbackNotificationHandler(
+        _ handler: @escaping @Sendable (Message<AnyNotification>) async throws -> Void
+    ) {
+        precondition(
+            !registeredHandlers.isLocked,
+            "Cannot register handlers after connect(). Register all handlers before calling connect()."
+        )
+        registeredHandlers.fallbackNotificationHandler = AnyNotificationHandler(handler)
+    }
+
     /// Send a notification to the server
     func notify(_ notification: Message<some Notification>) async throws {
         guard isProtocolConnected else {

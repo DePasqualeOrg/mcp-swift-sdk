@@ -143,7 +143,17 @@ extension Client {
         }
 
         // --- Handler lookup ---
-        guard let handler = registeredHandlers.requestHandlers[request.method] else {
+        // Try specific handler first, then fallback handler
+        let handler: ClientRequestHandlerBox
+        if let specificHandler = registeredHandlers.requestHandlers[request.method] {
+            handler = specificHandler
+        } else if let fallbackHandler = registeredHandlers.fallbackRequestHandler {
+            logger?.debug(
+                "Using fallback handler for server request",
+                metadata: ["method": "\(request.method)"]
+            )
+            handler = fallbackHandler
+        } else {
             logger?.warning(
                 "No handler registered for server request",
                 metadata: ["method": "\(request.method)"]
