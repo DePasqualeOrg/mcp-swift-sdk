@@ -233,7 +233,7 @@ extension Server {
         }
 
         // Find handler for method name
-        guard let handler = methodHandlers[request.method] else {
+        guard let handler = registeredHandlers.methodHandlers[request.method] else {
             let error = MCPError.methodNotFound("Unknown method: \(request.method)")
             let response = AnyMethod.response(id: request.id, error: error)
 
@@ -364,7 +364,7 @@ extension Server {
         }
 
         // Find notification handlers for this method
-        guard let handlers = notificationHandlers[message.method] else { return }
+        guard let handlers = registeredHandlers.notificationHandlers[message.method] else { return }
 
         // Convert notification parameters to concrete type and call handlers
         for handler in handlers {

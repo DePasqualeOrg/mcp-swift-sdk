@@ -460,11 +460,28 @@ package extension ProtocolLayer {
     }
 
     /// Send a request with options for progress tracking and timeout.
+    ///
+    /// - Parameters:
+    ///   - request: The encoded request data.
+    ///   - requestId: The ID of the request.
+    ///   - options: Options for progress tracking and timeout.
+    ///   - metaValues: Optional metadata values to inject into the request's `_meta` field.
+    ///     If provided, these values are merged into any existing `_meta` fields in the request.
+    ///     This is the centralized location for the decode-mutate-encode pattern needed to
+    ///     inject metadata like `progressToken` into typed request parameters.
     func sendProtocolRequest(
         _ request: Data,
         requestId: RequestId,
-        options: ProtocolRequestOptions
+        options: ProtocolRequestOptions,
+        metaValues: [String: Value]? = nil
     ) async throws -> Data {
+        // Inject metadata values if provided
+        let requestData: Data = if let metaValues {
+            try injectMeta(into: request, values: metaValues)
+        } else {
+            request
+        }
+
         // Register progress callback and request→token mapping
         if let token = options.progressToken, let onProgress = options.onProgress {
             protocolState.progressCallbacks[token] = onProgress
@@ -496,7 +513,7 @@ package extension ProtocolLayer {
                     // Progress-aware timeout
                     try await withThrowingTaskGroup(of: Data.self) { group in
                         group.addTask {
-                            try await self.sendProtocolRequest(request, requestId: requestId)
+                            try await self.sendProtocolRequest(requestData, requestId: requestId)
                         }
                         group.addTask {
                             try await controller.waitForTimeout()
@@ -513,7 +530,7 @@ package extension ProtocolLayer {
                     // Simple timeout
                     try await withThrowingTaskGroup(of: Data.self) { group in
                         group.addTask {
-                            try await self.sendProtocolRequest(request, requestId: requestId)
+                            try await self.sendProtocolRequest(requestData, requestId: requestId)
                         }
                         group.addTask {
                             try await Task.sleep(for: timeout)
@@ -527,7 +544,7 @@ package extension ProtocolLayer {
                     }
                 }
             } else {
-                try await sendProtocolRequest(request, requestId: requestId)
+                try await sendProtocolRequest(requestData, requestId: requestId)
             }
 
             // Clean up on success
@@ -772,6 +789,61 @@ package extension ProtocolLayer {
 
         for (_, request) in pendingToFail {
             request.resume(throwing: error)
+        }
+    }
+
+    // MARK: Request Metadata Injection
+
+    /// Injects metadata values into the `_meta` field of a JSON-RPC request.
+    ///
+    /// This is the single location for the decode-mutate-encode pattern needed to
+    /// inject metadata (like `progressToken`) into typed request parameters. Swift's
+    /// type system prevents generically adding fields to arbitrary `M.Parameters`
+    /// types, so this runtime approach is necessary.
+    ///
+    /// Both TypeScript and Python SDKs use a similar pattern at the protocol layer:
+    /// - TypeScript: object spread in `Protocol.request()` (lines 1121-1129)
+    /// - Python: dict mutation in `BaseSession.send_request()` (lines 252-261)
+    ///
+    /// - Parameters:
+    ///   - requestData: The encoded request data.
+    ///   - values: The metadata values to inject into `_meta`.
+    /// - Returns: The modified request data with metadata injected.
+    /// - Throws: `MCPError.internalError` if the request cannot be decoded or re-encoded.
+    private func injectMeta(into requestData: Data, values: [String: Value]) throws -> Data {
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+
+        // Decode to dictionary for mutation
+        var dict: [String: Value]
+        do {
+            dict = try decoder.decode([String: Value].self, from: requestData)
+        } catch {
+            protocolLogger?.error("Failed to decode request for metadata injection", metadata: ["error": "\(error)"])
+            throw MCPError.internalError("Failed to decode request for metadata injection: \(error)")
+        }
+
+        // Get or create params
+        var params = dict["params"]?.objectValue ?? [:]
+
+        // Get or create _meta
+        var meta = params["_meta"]?.objectValue ?? [:]
+
+        // Merge in the new values (overwrites existing keys)
+        for (key, value) in values {
+            meta[key] = value
+        }
+
+        // Update the structure
+        params["_meta"] = .object(meta)
+        dict["params"] = .object(params)
+
+        // Re-encode
+        do {
+            return try encoder.encode(dict)
+        } catch {
+            protocolLogger?.error("Failed to re-encode request after metadata injection", metadata: ["error": "\(error)"])
+            throw MCPError.internalError("Failed to re-encode request after metadata injection: \(error)")
         }
     }
 }

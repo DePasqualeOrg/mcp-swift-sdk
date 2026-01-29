@@ -115,6 +115,7 @@ extension Client {
     /// - It keeps task logic separate from normal handler logic
     /// - It's more explicit about which handler is called for which request type
     func handleIncomingRequest(_ request: Request<AnyMethod>) async {
+        // --- Logging ---
         logger?.trace(
             "Processing incoming request from server",
             metadata: [
@@ -123,8 +124,9 @@ extension Client {
             ]
         )
 
-        // Validate elicitation mode against client capabilities
-        // Per spec: Client MUST return -32602 if server requests unsupported mode
+        // --- Pre-dispatch validation ---
+        // Elicitation mode validation requires runtime capabilities, so it stays at dispatch time.
+        // Per spec: Client MUST return -32602 if server requests unsupported mode.
         if request.method == Elicit.name {
             if let modeError = await validateElicitationMode(request) {
                 await sendResponse(modeError)
@@ -132,21 +134,20 @@ extension Client {
             }
         }
 
-        // Check for task-augmented sampling/elicitation requests first
-        // This matches the Python SDK pattern where task detection happens at dispatch time
+        // --- Task-augmented routing ---
+        // Check for task-augmented sampling/elicitation requests before normal handling.
+        // This matches the Python SDK pattern where task detection happens at dispatch time.
         if let taskResponse = await handleTaskAugmentedRequest(request) {
             await sendResponse(taskResponse)
             return
         }
 
-        // Find handler for method name
-        guard let handler = requestHandlers[request.method] else {
+        // --- Handler lookup ---
+        guard let handler = registeredHandlers.requestHandlers[request.method] else {
             logger?.warning(
                 "No handler registered for server request",
                 metadata: ["method": "\(request.method)"]
             )
-
-            // Send error response
             let response = AnyMethod.response(
                 id: request.id,
                 error: MCPError.methodNotFound("Client has no handler for: \(request.method)")
@@ -155,8 +156,8 @@ extension Client {
             return
         }
 
-        // Create the request handler context
-        // This provides cancellation checking and notification sending to the handler
+        // --- Context creation ---
+        // Create the request handler context with closures for sending notifications/requests.
         let requestMeta = extractMeta(from: request.params)
         let context = RequestHandlerContext(
             sessionId: nil,
@@ -190,13 +191,12 @@ extension Client {
             }
         )
 
-        // Execute the handler and send response
+        // --- Execution with cancellation awareness ---
+        // Per MCP spec: "Receivers of a cancellation notification SHOULD... Not send a response
+        // for the cancelled request". Check cancellation on both success and error paths.
         do {
             let response = try await handler(request, context: context)
 
-            // Check cancellation before sending response (per MCP spec:
-            // "Receivers of a cancellation notification SHOULD... Not send a response
-            // for the cancelled request")
             if Task.isCancelled {
                 logger?.debug(
                     "Server request cancelled, suppressing response",
@@ -207,7 +207,6 @@ extension Client {
 
             await sendResponse(response)
         } catch {
-            // Also check cancellation on error path - don't send error response if cancelled
             if Task.isCancelled {
                 logger?.debug(
                     "Server request cancelled during error handling, suppressing response",
@@ -223,7 +222,6 @@ extension Client {
                     "error": "\(error)",
                 ]
             )
-            // Error already logged above - sanitize for response
             let errorResponse = AnyMethod.response(
                 id: request.id,
                 error: (error as? MCPError) ?? MCPError.internalError("An internal error occurred")
@@ -281,7 +279,7 @@ extension Client {
         do {
             // Check for task-augmented sampling request
             if request.method == CreateSamplingMessage.name,
-               let taskHandler = taskAugmentedSamplingHandler
+               let taskHandler = registeredHandlers.taskAugmentedSamplingHandler
             {
                 let paramsData = try encoder.encode(request.params)
                 let params = try decoder.decode(CreateSamplingMessage.Parameters.self, from: paramsData)
@@ -296,7 +294,7 @@ extension Client {
 
             // Check for task-augmented elicitation request
             if request.method == Elicit.name,
-               let taskHandler = taskAugmentedElicitationHandler
+               let taskHandler = registeredHandlers.taskAugmentedElicitationHandler
             {
                 let paramsData = try encoder.encode(request.params)
                 let params = try decoder.decode(Elicit.Parameters.self, from: paramsData)

@@ -40,12 +40,12 @@ extension Server {
 
     /// Track an in-flight request handler Task.
     func trackInFlightRequest(_ requestId: RequestId, task: Task<Void, Never>) {
-        inFlightHandlerTasks[requestId] = task
+        registeredHandlers.inFlightHandlerTasks[requestId] = task
     }
 
     /// Remove an in-flight request handler Task.
     func removeInFlightRequest(_ requestId: RequestId) {
-        inFlightHandlerTasks.removeValue(forKey: requestId)
+        registeredHandlers.inFlightHandlerTasks.removeValue(forKey: requestId)
     }
 
     /// Cancel an in-flight request handler Task.
@@ -53,7 +53,7 @@ extension Server {
     /// Called when a CancelledNotification is received for a specific requestId.
     /// Per MCP spec, if the request is unknown or already completed, this is a no-op.
     func cancelInFlightRequest(_ requestId: RequestId, reason: String?) async {
-        if let task = inFlightHandlerTasks[requestId] {
+        if let task = registeredHandlers.inFlightHandlerTasks[requestId] {
             task.cancel()
             logger?.debug(
                 "Cancelled in-flight request",

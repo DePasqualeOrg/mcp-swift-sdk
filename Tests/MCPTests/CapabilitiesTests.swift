@@ -1207,3 +1207,278 @@ struct NotificationCapabilityValidationTests {
         }
     }
 }
+
+// MARK: - Capability Auto-Inference Tests (Phase 0 Test Audit)
+
+@Suite("Capability Auto-Inference Tests")
+struct CapabilityAutoInferenceTests {
+    /// Test that registering a sampling handler auto-infers the sampling capability.
+    @Test("Sampling capability inferred from handler registration", .timeLimit(.minutes(1)))
+    func testSamplingCapabilityInferred() async throws {
+        let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
+
+        let server = Server(
+            name: "TestServer",
+            version: "1.0.0",
+            capabilities: .init(tools: .init())
+        )
+
+        await server.withRequestHandler(ListTools.self) { _, _ in
+            ListTools.Result(tools: [])
+        }
+
+        try await server.start(transport: serverTransport)
+
+        // Client with sampling handler registered (no explicit capabilities)
+        let client = Client(name: "InferenceTestClient", version: "1.0")
+
+        await client.withSamplingHandler(supportsContext: true, supportsTools: true) { _, _ in
+            ClientSamplingRequest.Result(
+                model: "test",
+                stopReason: .endTurn,
+                role: .assistant,
+                content: []
+            )
+        }
+
+        try await client.connect(transport: clientTransport)
+
+        // Verify capabilities were auto-inferred
+        let caps = await client.capabilities
+        #expect(caps.sampling != nil, "Sampling capability should be auto-inferred")
+        #expect(caps.sampling?.context != nil, "Sampling context capability should be set")
+        #expect(caps.sampling?.tools != nil, "Sampling tools capability should be set")
+
+        await client.disconnect()
+        await server.stop()
+    }
+
+    /// Test that registering a roots handler auto-infers the roots capability.
+    @Test("Roots capability inferred from handler registration", .timeLimit(.minutes(1)))
+    func testRootsCapabilityInferred() async throws {
+        let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
+
+        let server = Server(
+            name: "TestServer",
+            version: "1.0.0",
+            capabilities: .init(tools: .init())
+        )
+
+        await server.withRequestHandler(ListTools.self) { _, _ in
+            ListTools.Result(tools: [])
+        }
+
+        try await server.start(transport: serverTransport)
+
+        // Client with roots handler registered
+        let client = Client(name: "RootsInferenceClient", version: "1.0")
+
+        await client.withRootsHandler(listChanged: true) { _ in
+            [Root(uri: "file:///test", name: "Test")]
+        }
+
+        try await client.connect(transport: clientTransport)
+
+        // Verify capabilities were auto-inferred
+        let caps = await client.capabilities
+        #expect(caps.roots != nil, "Roots capability should be auto-inferred")
+        #expect(caps.roots?.listChanged == true, "Roots listChanged should be set")
+
+        await client.disconnect()
+        await server.stop()
+    }
+
+    /// Test that registering an elicitation handler auto-infers the elicitation capability.
+    @Test("Elicitation capability inferred from handler registration", .timeLimit(.minutes(1)))
+    func testElicitationCapabilityInferred() async throws {
+        let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
+
+        let server = Server(
+            name: "TestServer",
+            version: "1.0.0",
+            capabilities: .init(tools: .init())
+        )
+
+        await server.withRequestHandler(ListTools.self) { _, _ in
+            ListTools.Result(tools: [])
+        }
+
+        try await server.start(transport: serverTransport)
+
+        // Client with elicitation handler (both form and url modes)
+        let client = Client(name: "ElicitationInferenceClient", version: "1.0")
+
+        await client.withElicitationHandler(
+            formMode: .enabled(applyDefaults: true),
+            urlMode: .enabled
+        ) { _, _ in
+            Elicit.Result(action: .decline)
+        }
+
+        try await client.connect(transport: clientTransport)
+
+        // Verify capabilities were auto-inferred
+        let caps = await client.capabilities
+        #expect(caps.elicitation != nil, "Elicitation capability should be auto-inferred")
+        #expect(caps.elicitation?.form != nil, "Elicitation form mode should be set")
+        #expect(caps.elicitation?.form?.applyDefaults == true, "Elicitation applyDefaults should be set")
+        #expect(caps.elicitation?.url != nil, "Elicitation url mode should be set")
+
+        await client.disconnect()
+        await server.stop()
+    }
+
+    /// Test that explicit capabilities override auto-inferred capabilities.
+    @Test("Explicit capabilities override auto-inferred", .timeLimit(.minutes(1)))
+    func testExplicitCapabilitiesOverrideInferred() async throws {
+        let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
+
+        let server = Server(
+            name: "TestServer",
+            version: "1.0.0",
+            capabilities: .init(tools: .init())
+        )
+
+        await server.withRequestHandler(ListTools.self) { _, _ in
+            ListTools.Result(tools: [])
+        }
+
+        try await server.start(transport: serverTransport)
+
+        // Client with explicit capabilities that differ from what handlers would infer
+        let client = Client(
+            name: "ExplicitCapClient",
+            version: "1.0",
+            // Explicit: sampling with context only (no tools)
+            capabilities: .init(
+                sampling: .init(context: .init(), tools: nil)
+            )
+        )
+
+        // Handler registration suggests tools support, but explicit says no
+        await client.withSamplingHandler(supportsContext: true, supportsTools: true) { _, _ in
+            ClientSamplingRequest.Result(
+                model: "test",
+                stopReason: .endTurn,
+                role: .assistant,
+                content: []
+            )
+        }
+
+        try await client.connect(transport: clientTransport)
+
+        // Explicit capabilities should win
+        let caps = await client.capabilities
+        #expect(caps.sampling != nil, "Sampling capability should exist")
+        #expect(caps.sampling?.context != nil, "Sampling context should be set (explicit)")
+        #expect(caps.sampling?.tools == nil, "Sampling tools should be nil (explicit override)")
+
+        await client.disconnect()
+        await server.stop()
+    }
+
+    /// Test that multiple handler registrations all contribute to capabilities.
+    @Test("Multiple handlers contribute to capabilities", .timeLimit(.minutes(1)))
+    func testMultipleHandlersContributeToCapabilities() async throws {
+        let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
+
+        let server = Server(
+            name: "TestServer",
+            version: "1.0.0",
+            capabilities: .init(tools: .init())
+        )
+
+        await server.withRequestHandler(ListTools.self) { _, _ in
+            ListTools.Result(tools: [])
+        }
+
+        try await server.start(transport: serverTransport)
+
+        // Client with multiple handlers
+        let client = Client(name: "MultiHandlerClient", version: "1.0")
+
+        await client.withSamplingHandler(supportsTools: true) { _, _ in
+            ClientSamplingRequest.Result(
+                model: "test",
+                stopReason: .endTurn,
+                role: .assistant,
+                content: []
+            )
+        }
+
+        await client.withRootsHandler(listChanged: true) { _ in
+            [Root(uri: "file:///test", name: "Test")]
+        }
+
+        await client.withElicitationHandler(formMode: .enabled()) { _, _ in
+            Elicit.Result(action: .decline)
+        }
+
+        try await client.connect(transport: clientTransport)
+
+        // All capabilities should be present
+        let caps = await client.capabilities
+        #expect(caps.sampling != nil, "Sampling capability should be inferred")
+        #expect(caps.sampling?.tools != nil, "Sampling tools should be set")
+        #expect(caps.roots != nil, "Roots capability should be inferred")
+        #expect(caps.roots?.listChanged == true, "Roots listChanged should be true")
+        #expect(caps.elicitation != nil, "Elicitation capability should be inferred")
+        #expect(caps.elicitation?.form != nil, "Elicitation form mode should be set")
+
+        await client.disconnect()
+        await server.stop()
+    }
+
+    /// Test that registering handlers in different orders produces the same capabilities.
+    @Test("Registration order does not affect capabilities", .timeLimit(.minutes(1)))
+    func testRegistrationOrderIndependent() async throws {
+        // Test two clients with handlers registered in different orders
+        let (clientTransport1, serverTransport1) = await InMemoryTransport.createConnectedPair()
+        let (clientTransport2, serverTransport2) = await InMemoryTransport.createConnectedPair()
+
+        // Set up two servers
+        let server1 = Server(name: "Server1", version: "1.0", capabilities: .init(tools: .init()))
+        let server2 = Server(name: "Server2", version: "1.0", capabilities: .init(tools: .init()))
+
+        await server1.withRequestHandler(ListTools.self) { _, _ in ListTools.Result(tools: []) }
+        await server2.withRequestHandler(ListTools.self) { _, _ in ListTools.Result(tools: []) }
+
+        try await server1.start(transport: serverTransport1)
+        try await server2.start(transport: serverTransport2)
+
+        // Client 1: Register in order A
+        let client1 = Client(name: "Client1", version: "1.0")
+        await client1.withSamplingHandler(supportsTools: true) { _, _ in
+            ClientSamplingRequest.Result(model: "test", stopReason: .endTurn, role: .assistant, content: [])
+        }
+        await client1.withRootsHandler(listChanged: true) { _ in [] }
+
+        // Client 2: Register in order B (reversed)
+        let client2 = Client(name: "Client2", version: "1.0")
+        await client2.withRootsHandler(listChanged: true) { _ in [] }
+        await client2.withSamplingHandler(supportsTools: true) { _, _ in
+            ClientSamplingRequest.Result(model: "test", stopReason: .endTurn, role: .assistant, content: [])
+        }
+
+        try await client1.connect(transport: clientTransport1)
+        try await client2.connect(transport: clientTransport2)
+
+        // Both should have identical capabilities
+        let caps1 = await client1.capabilities
+        let caps2 = await client2.capabilities
+
+        #expect(caps1.sampling?.tools != nil, "Client1 sampling.tools should be set")
+        #expect(caps2.sampling?.tools != nil, "Client2 sampling.tools should be set")
+        #expect(caps1.roots?.listChanged == true, "Client1 roots.listChanged should be true")
+        #expect(caps2.roots?.listChanged == true, "Client2 roots.listChanged should be true")
+
+        // Capabilities should be equal
+        #expect(caps1.sampling != nil && caps2.sampling != nil)
+        #expect(caps1.roots != nil && caps2.roots != nil)
+
+        await client1.disconnect()
+        await client2.disconnect()
+        await server1.stop()
+        await server2.stop()
+    }
+}

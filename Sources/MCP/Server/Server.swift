@@ -8,6 +8,27 @@ import struct Foundation.Date
 import class Foundation.JSONDecoder
 import class Foundation.JSONEncoder
 
+// MARK: - Server Handler Registry
+
+/// Registry of handlers for responding to client requests and notifications.
+///
+/// This struct consolidates all handler-related state in one place, making it
+/// easier to manage and reason about. Unlike `ClientHandlerRegistry`, this struct
+/// does not include capability inference since Server capabilities are managed
+/// differently (either set explicitly or auto-detected by MCPServer).
+struct ServerHandlerRegistry: Sendable {
+    /// Request handlers keyed by method name.
+    var methodHandlers: [String: RequestHandlerBox] = [:]
+
+    /// Notification handlers keyed by notification name.
+    /// Multiple handlers can be registered for the same notification type.
+    var notificationHandlers: [String: [NotificationHandlerBox]] = [:]
+
+    /// In-flight request handler Tasks, tracked by request ID.
+    /// Used for protocol-level cancellation when CancelledNotification is received.
+    var inFlightHandlerTasks: [RequestId: Task<Void, Never>] = [:]
+}
+
 /// Model Context Protocol server.
 ///
 /// ## Architecture: One Server per Client
@@ -275,10 +296,8 @@ public actor Server: ProtocolLayer {
         ExperimentalServerFeatures(server: self)
     }
 
-    /// Request handlers
-    var methodHandlers: [String: RequestHandlerBox] = [:]
-    /// Notification handlers
-    var notificationHandlers: [String: [NotificationHandlerBox]] = [:]
+    /// Registry of handlers for requests and notifications.
+    var registeredHandlers = ServerHandlerRegistry()
 
     /// Protocol state for JSON-RPC message handling.
     package var protocolState = ProtocolState()
@@ -312,10 +331,6 @@ public actor Server: ProtocolLayer {
     ///
     /// Log messages below a session's level will be filtered out for that session.
     var loggingLevels: [String?: LoggingLevel] = [:]
-
-    /// In-flight request handler Tasks, tracked by request ID.
-    /// Used for protocol-level cancellation when CancelledNotification is received.
-    var inFlightHandlerTasks: [RequestId: Task<Void, Never>] = [:]
 
     /// JSON Schema validator for validating elicitation responses.
     let validator: any JSONSchemaValidator
@@ -386,14 +401,14 @@ public actor Server: ProtocolLayer {
     /// Stop the server
     public func stop() async {
         // Cancel all in-flight request handlers
-        for (requestId, handlerTask) in inFlightHandlerTasks {
+        for (requestId, handlerTask) in registeredHandlers.inFlightHandlerTasks {
             handlerTask.cancel()
             protocolLogger?.debug(
                 "Cancelled in-flight request during shutdown",
                 metadata: ["id": "\(requestId)"]
             )
         }
-        inFlightHandlerTasks.removeAll()
+        registeredHandlers.inFlightHandlerTasks.removeAll()
 
         // Disconnect via protocol conformance (cancels message loop, fails pending, disconnects transport)
         await stopProtocol()
@@ -419,7 +434,7 @@ public actor Server: ProtocolLayer {
         _: M.Type,
         handler: @escaping @Sendable (M.Parameters, RequestHandlerContext) async throws -> M.Result
     ) {
-        methodHandlers[M.name] = TypedRequestHandler {
+        registeredHandlers.methodHandlers[M.name] = TypedRequestHandler {
             (request: Request<M>, context: RequestHandlerContext) -> Response<M> in
             let result = try await handler(request.params, context)
             return Response(id: request.id, result: result)
@@ -470,7 +485,7 @@ public actor Server: ProtocolLayer {
         _: N.Type,
         handler: @escaping @Sendable (Message<N>) async throws -> Void
     ) {
-        notificationHandlers[N.name, default: []].append(TypedNotificationHandler(handler))
+        registeredHandlers.notificationHandlers[N.name, default: []].append(TypedNotificationHandler(handler))
     }
 
     /// Register a response router to intercept responses before normal handling.
@@ -640,14 +655,14 @@ public actor Server: ProtocolLayer {
     /// when the protocol layer transitions to `.disconnected`, ensuring it only fires once.
     package func handleConnectionClosed() async {
         // Cancel all in-flight request handlers
-        for (requestId, handlerTask) in inFlightHandlerTasks {
+        for (requestId, handlerTask) in registeredHandlers.inFlightHandlerTasks {
             handlerTask.cancel()
             protocolLogger?.debug(
                 "Cancelled in-flight request on disconnect",
                 metadata: ["id": "\(requestId)"]
             )
         }
-        inFlightHandlerTasks.removeAll()
+        registeredHandlers.inFlightHandlerTasks.removeAll()
     }
 
     /// Handle unknown/malformed messages by sending error responses.

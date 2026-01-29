@@ -10,7 +10,7 @@ public extension Client {
         _: N.Type,
         handler: @escaping @Sendable (Message<N>) async throws -> Void
     ) {
-        notificationHandlers[N.name, default: []].append(TypedNotificationHandler(handler))
+        registeredHandlers.notificationHandlers[N.name, default: []].append(TypedNotificationHandler(handler))
     }
 
     /// Send a notification to the server
@@ -104,7 +104,7 @@ public extension Client {
         _: M.Type,
         handler: @escaping @Sendable (M.Parameters, RequestHandlerContext) async throws -> M.Result
     ) {
-        requestHandlers[M.name] = TypedClientRequestHandler<M>(handler)
+        registeredHandlers.requestHandlers[M.name] = TypedClientRequestHandler<M>(handler)
     }
 
     /// Register a handler for `roots/list` requests from the server.
@@ -143,10 +143,10 @@ public extension Client {
         handler: @escaping @Sendable (RequestHandlerContext) async throws -> [Root]
     ) {
         precondition(
-            !handlersLocked,
+            !registeredHandlers.isLocked,
             "Cannot register handlers after connect(). Register all handlers before calling connect()."
         )
-        rootsConfig = RootsConfig(listChanged: listChanged)
+        registeredHandlers.rootsConfig = ClientHandlerRegistry.RootsConfig(listChanged: listChanged)
         withRequestHandler(ListRoots.self) { _, context in
             try await ListRoots.Result(roots: handler(context))
         }
@@ -195,10 +195,10 @@ public extension Client {
     /// - Precondition: Must not be called after `connect()`.
     func withTasksCapability(_ config: Capabilities.Tasks) {
         precondition(
-            !handlersLocked,
+            !registeredHandlers.isLocked,
             "Cannot register handlers after connect(). Register all handlers before calling connect()."
         )
-        tasksConfig = config
+        registeredHandlers.tasksConfig = config
     }
 
     /// Register a handler for `sampling/createMessage` requests from the server.
@@ -250,10 +250,10 @@ public extension Client {
         handler: @escaping @Sendable (ClientSamplingRequest.Parameters, RequestHandlerContext) async throws -> ClientSamplingRequest.Result
     ) {
         precondition(
-            !handlersLocked,
+            !registeredHandlers.isLocked,
             "Cannot register handlers after connect(). Register all handlers before calling connect()."
         )
-        samplingConfig = SamplingConfig(supportsContext: supportsContext, supportsTools: supportsTools)
+        registeredHandlers.samplingConfig = ClientHandlerRegistry.SamplingConfig(supportsContext: supportsContext, supportsTools: supportsTools)
         withRequestHandler(ClientSamplingRequest.self, handler: handler)
     }
 
@@ -311,14 +311,14 @@ public extension Client {
         handler: @escaping @Sendable (Elicit.Parameters, RequestHandlerContext) async throws -> Elicit.Result
     ) {
         precondition(
-            !handlersLocked,
+            !registeredHandlers.isLocked,
             "Cannot register handlers after connect(). Register all handlers before calling connect()."
         )
         precondition(
             formMode != nil || urlMode != nil,
             "At least one elicitation mode (formMode or urlMode) must be enabled."
         )
-        elicitationConfig = ElicitationConfig(formMode: formMode, urlMode: urlMode)
+        registeredHandlers.elicitationConfig = ClientHandlerRegistry.ElicitationConfig(formMode: formMode, urlMode: urlMode)
         withRequestHandler(Elicit.self, handler: handler)
     }
 
@@ -332,7 +332,7 @@ public extension Client {
     internal func _setTaskAugmentedSamplingHandler(
         _ handler: @escaping ExperimentalClientTaskHandlers.TaskAugmentedSamplingHandler
     ) {
-        taskAugmentedSamplingHandler = handler
+        registeredHandlers.taskAugmentedSamplingHandler = handler
     }
 
     /// Internal method to set the task-augmented elicitation handler.
@@ -345,6 +345,6 @@ public extension Client {
     internal func _setTaskAugmentedElicitationHandler(
         _ handler: @escaping ExperimentalClientTaskHandlers.TaskAugmentedElicitationHandler
     ) {
-        taskAugmentedElicitationHandler = handler
+        registeredHandlers.taskAugmentedElicitationHandler = handler
     }
 }

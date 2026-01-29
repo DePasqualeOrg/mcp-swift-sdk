@@ -185,16 +185,12 @@ public actor MCPServer {
     public func createSession() async -> Server {
         // Build capabilities: use explicit overrides from baseCapabilities,
         // otherwise auto-detect based on registrations.
-        var capabilities = baseCapabilities
-        if capabilities.tools == nil, hasTools {
-            capabilities.tools = .init(listChanged: true)
-        }
-        if capabilities.resources == nil, hasResources {
-            capabilities.resources = .init(subscribe: false, listChanged: true)
-        }
-        if capabilities.prompts == nil, hasPrompts {
-            capabilities.prompts = .init(listChanged: true)
-        }
+        let capabilities = ServerCapabilityHelpers.merge(
+            base: baseCapabilities,
+            hasTools: hasTools,
+            hasResources: hasResources,
+            hasPrompts: hasPrompts
+        )
 
         let session = Server(
             name: name,

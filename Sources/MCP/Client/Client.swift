@@ -26,6 +26,132 @@ public enum URLModeConfig: Sendable, Hashable {
     case enabled
 }
 
+// MARK: - Client Handler Registry
+
+/// Registry of handlers and their configuration for responding to server requests/notifications.
+///
+/// This struct consolidates all handler-related state in one place, making the
+/// coupling between handlers and capabilities explicit. It's named "Registry" rather
+/// than "Handlers" because it contains both handlers AND configuration that affects
+/// capability inference.
+///
+/// The `inferredCapabilities` computed property derives capabilities from the registered
+/// handlers, following the Python SDK's `ExperimentalTaskHandlers.build_capability()` pattern.
+struct ClientHandlerRegistry: Sendable {
+    // MARK: - Handlers
+
+    /// Notification handlers keyed by method name.
+    var notificationHandlers: [String: [NotificationHandlerBox]] = [:]
+
+    /// Request handlers for server→client requests, keyed by method name.
+    var requestHandlers: [String: ClientRequestHandlerBox] = [:]
+
+    /// Task-augmented sampling handler (called when request has `task` field).
+    var taskAugmentedSamplingHandler: ExperimentalClientTaskHandlers.TaskAugmentedSamplingHandler?
+
+    /// Task-augmented elicitation handler (called when request has `task` field).
+    var taskAugmentedElicitationHandler: ExperimentalClientTaskHandlers.TaskAugmentedElicitationHandler?
+
+    // MARK: - Handler Configuration (affects inferred capabilities)
+
+    /// Configuration for sampling handler, used to build capabilities at connect time.
+    struct SamplingConfig: Sendable {
+        var supportsContext: Bool
+        var supportsTools: Bool
+    }
+
+    /// Configuration for elicitation handler, used to build capabilities at connect time.
+    struct ElicitationConfig: Sendable {
+        var formMode: FormModeConfig?
+        var urlMode: URLModeConfig?
+    }
+
+    /// Configuration for roots handler, used to build capabilities at connect time.
+    struct RootsConfig: Sendable {
+        var listChanged: Bool
+    }
+
+    /// Sampling handler configuration (set when handler is registered).
+    var samplingConfig: SamplingConfig?
+
+    /// Elicitation handler configuration (set when handler is registered).
+    var elicitationConfig: ElicitationConfig?
+
+    /// Roots handler configuration (set when handler is registered).
+    var rootsConfig: RootsConfig?
+
+    /// Tasks capability configuration (set via withTasksCapability).
+    var tasksConfig: Client.Capabilities.Tasks?
+
+    // MARK: - State
+
+    /// Whether handler registration is locked (after connection).
+    /// Set to `true` on the first call to `connect()` and intentionally never reset,
+    /// so handlers registered before connection persist across reconnections without
+    /// allowing duplicate registration.
+    var isLocked = false
+
+    // MARK: - Inferred Capabilities
+
+    /// Infer capabilities from registered handlers and their configuration.
+    ///
+    /// This is used during `connect()` to build the client's advertised capabilities.
+    /// The computed property follows the Python SDK's `ExperimentalTaskHandlers.build_capability()`
+    /// pattern where capability presence is inferred from which handlers are registered.
+    func inferCapabilities() -> Client.Capabilities {
+        var caps = Client.Capabilities()
+
+        // Sampling capability
+        if let config = samplingConfig {
+            caps.sampling = .init(
+                context: config.supportsContext ? .init() : nil,
+                tools: config.supportsTools ? .init() : nil
+            )
+        }
+
+        // Elicitation capability
+        if let config = elicitationConfig {
+            caps.elicitation = .init(
+                form: config.formMode.map { mode in
+                    switch mode {
+                        case let .enabled(applyDefaults):
+                            .init(applyDefaults: applyDefaults ? true : nil)
+                    }
+                },
+                url: config.urlMode.map { _ in .init() }
+            )
+        }
+
+        // Roots capability
+        if let config = rootsConfig {
+            caps.roots = .init(listChanged: config.listChanged ? true : nil)
+        }
+
+        // Tasks capability: use explicit config if provided, otherwise infer from handlers.
+        // This matches Python SDK's pattern where task-augmented handler presence
+        // determines capability advertisement.
+        if let config = tasksConfig {
+            caps.tasks = config
+        } else if taskAugmentedSamplingHandler != nil || taskAugmentedElicitationHandler != nil {
+            // Infer tasks.requests capability from registered task-augmented handlers
+            var requestsCap = Client.Capabilities.Tasks.Requests()
+            if taskAugmentedSamplingHandler != nil {
+                requestsCap.sampling = Client.Capabilities.Tasks.Requests.Sampling(
+                    createMessage: Client.Capabilities.Tasks.Requests.Sampling.CreateMessage()
+                )
+            }
+            if taskAugmentedElicitationHandler != nil {
+                requestsCap.elicitation = Client.Capabilities.Tasks.Requests.Elicitation(
+                    create: Client.Capabilities.Tasks.Requests.Elicitation.Create()
+                )
+            }
+            caps.tasks = Client.Capabilities.Tasks(requests: requestsCap)
+        }
+
+        return caps
+    }
+}
+
 /// Model Context Protocol client
 public actor Client: ProtocolLayer {
     /// The client configuration
@@ -234,15 +360,10 @@ public actor Client: ProtocolLayer {
     /// Returns `nil` if the client has not been initialized or the server didn't provide instructions.
     public private(set) var instructions: String?
 
-    /// A dictionary of type-erased notification handlers, keyed by method name
-    var notificationHandlers: [String: [NotificationHandlerBox]] = [:]
-    /// A dictionary of type-erased request handlers for server→client requests, keyed by method name
-    var requestHandlers: [String: ClientRequestHandlerBox] = [:]
-    /// Task-augmented sampling handler (called when request has `task` field)
-    var taskAugmentedSamplingHandler: ExperimentalClientTaskHandlers.TaskAugmentedSamplingHandler?
-    /// Task-augmented elicitation handler (called when request has `task` field)
-    var taskAugmentedElicitationHandler:
-        ExperimentalClientTaskHandlers.TaskAugmentedElicitationHandler?
+    /// Registry of handlers and their configuration.
+    /// All handler-related state is consolidated here for clarity.
+    var registeredHandlers = ClientHandlerRegistry()
+
     /// Continuation for the notification dispatch stream.
     ///
     /// User-registered notification handlers are dispatched through this stream
@@ -255,42 +376,9 @@ public actor Client: ProtocolLayer {
     /// The task that consumes the notification dispatch stream and invokes handlers.
     var notificationTask: Task<Void, Never>?
 
-    // MARK: - Capability Auto-Detection State
-
-    /// Configuration for sampling handler, used to build capabilities at connect time.
-    struct SamplingConfig: Sendable {
-        var supportsContext: Bool
-        var supportsTools: Bool
-    }
-
-    /// Configuration for elicitation handler, used to build capabilities at connect time.
-    struct ElicitationConfig: Sendable {
-        var formMode: FormModeConfig?
-        var urlMode: URLModeConfig?
-    }
-
-    /// Configuration for roots handler, used to build capabilities at connect time.
-    struct RootsConfig: Sendable {
-        var listChanged: Bool
-    }
-
-    /// Sampling handler configuration (set when handler is registered).
-    var samplingConfig: SamplingConfig?
-    /// Elicitation handler configuration (set when handler is registered).
-    var elicitationConfig: ElicitationConfig?
-    /// Roots handler configuration (set when handler is registered).
-    var rootsConfig: RootsConfig?
-    /// Tasks capability configuration (set via withTasksCapability).
-    var tasksConfig: Capabilities.Tasks?
-
     /// Explicit capability overrides from initializer.
     /// Only non-nil fields override auto-detection.
     let explicitCapabilities: Capabilities?
-
-    /// Whether handler registration is locked. Set to `true` on the first call to `connect()`
-    /// and intentionally never reset, so handlers registered before connection persist across
-    /// reconnections without allowing duplicate registration.
-    var handlersLocked: Bool = false
 
     /// Whether the CancelledNotification handler has been registered.
     /// Prevents duplicate registration when `connect()` is called multiple times (e.g., reconnection).
@@ -366,10 +454,10 @@ public actor Client: ProtocolLayer {
     public func connect(transport: any Transport) async throws -> Initialize.Result {
         // Build capabilities from handlers and explicit overrides
         capabilities = buildCapabilities()
-        await validateCapabilities(capabilities)
+        validateCapabilities(capabilities)
 
         // Lock handler registration after first connection
-        handlersLocked = true
+        registeredHandlers.isLocked = true
 
         try await transport.connect()
         protocolLogger = await transport.logger
@@ -387,7 +475,7 @@ public actor Client: ProtocolLayer {
         notificationContinuation = notifContinuation
         notificationTask = Task {
             for await notification in notificationStream {
-                let handlers = notificationHandlers[notification.method] ?? []
+                let handlers = registeredHandlers.notificationHandlers[notification.method] ?? []
                 for handler in handlers {
                     do {
                         try await handler(notification)
@@ -531,83 +619,44 @@ public actor Client: ProtocolLayer {
 
     /// Build capabilities from explicit overrides and handler registrations.
     ///
-    /// Explicit overrides (from initializer) take precedence over auto-detection
-    /// on a per-capability basis. Only non-nil explicit capabilities override;
-    /// others are auto-detected from registered handlers.
+    /// Uses `ClientCapabilityHelpers.merge()` to combine inferred capabilities
+    /// from registered handlers with explicit overrides from the initializer.
     private func buildCapabilities() -> Capabilities {
-        var capabilities = Capabilities()
+        let inferred = registeredHandlers.inferCapabilities()
 
-        // Sampling: explicit override (from initializer) OR auto-detect from handler
-        if let explicit = explicitCapabilities?.sampling {
-            capabilities.sampling = explicit
-        } else if let config = samplingConfig {
-            capabilities.sampling = .init(
-                context: config.supportsContext ? .init() : nil,
-                tools: config.supportsTools ? .init() : nil
+        // Log inferred capabilities at trace level to aid debugging
+        logger?.trace(
+            "Inferred capabilities from handlers",
+            metadata: [
+                "sampling": "\(inferred.sampling != nil)",
+                "elicitation": "\(inferred.elicitation != nil)",
+                "roots": "\(inferred.roots != nil)",
+                "tasks": "\(inferred.tasks != nil)",
+            ]
+        )
+
+        let merged = ClientCapabilityHelpers.merge(inferred: inferred, explicit: explicitCapabilities)
+
+        if explicitCapabilities != nil {
+            logger?.trace(
+                "Merged with explicit overrides",
+                metadata: [
+                    "sampling": "\(merged.sampling != nil)",
+                    "elicitation": "\(merged.elicitation != nil)",
+                    "roots": "\(merged.roots != nil)",
+                    "tasks": "\(merged.tasks != nil)",
+                ]
             )
         }
 
-        // Elicitation: explicit override OR auto-detect from handler
-        // Note: Always emit canonical form `{ form: {} }` not empty `{}` when form mode is enabled.
-        // Per spec: "For backwards compatibility, an empty capabilities object is equivalent to
-        // declaring support for form mode only." We emit the explicit form for clarity.
-        if let explicit = explicitCapabilities?.elicitation {
-            capabilities.elicitation = explicit
-        } else if let config = elicitationConfig {
-            capabilities.elicitation = .init(
-                form: config.formMode.map { mode in
-                    switch mode {
-                        case let .enabled(applyDefaults):
-                            .init(applyDefaults: applyDefaults ? true : nil)
-                    }
-                },
-                url: config.urlMode.map { _ in .init() }
-            )
-        }
-
-        // Roots: explicit override OR auto-detect from handler
-        if let explicit = explicitCapabilities?.roots {
-            capabilities.roots = explicit
-        } else if let config = rootsConfig {
-            capabilities.roots = .init(listChanged: config.listChanged ? true : nil)
-        }
-
-        // Tasks: explicit override OR auto-detect from config
-        if let explicit = explicitCapabilities?.tasks {
-            capabilities.tasks = explicit
-        } else if let config = tasksConfig {
-            capabilities.tasks = config
-        }
-
-        // Experimental: always from initializer (cannot auto-detect arbitrary capabilities)
-        capabilities.experimental = explicitCapabilities?.experimental
-
-        return capabilities
+        return merged
     }
 
     /// Validate capabilities configuration and log warnings for mismatches.
     ///
-    /// These are intentionally warnings (not errors) to support legitimate edge cases:
-    /// - Testing: advertise capabilities to test server behavior without implementing handlers
-    /// - Forward compatibility: explicit overrides may advertise capabilities not yet supported
-    /// - Gradual migration: configure capabilities before handlers are fully implemented
-    private func validateCapabilities(_ capabilities: Capabilities) async {
-        // Check for capabilities advertised without handlers
-        if capabilities.sampling != nil, requestHandlers[ClientSamplingRequest.name] == nil {
-            logger?.warning(
-                "Sampling capability will be advertised but no handler is registered"
-            )
-        }
-        if capabilities.elicitation != nil, requestHandlers[Elicit.name] == nil {
-            logger?.warning(
-                "Elicitation capability will be advertised but no handler is registered"
-            )
-        }
-        if capabilities.roots != nil, requestHandlers[ListRoots.name] == nil {
-            logger?.warning(
-                "Roots capability will be advertised but no handler is registered"
-            )
-        }
+    /// Delegates to `ClientCapabilityHelpers.validate()` for the actual validation logic.
+    private func validateCapabilities(_ capabilities: Capabilities) {
+        ClientCapabilityHelpers.validate(capabilities, handlers: registeredHandlers, logger: logger)
     }
 
     // MARK: - Lifecycle

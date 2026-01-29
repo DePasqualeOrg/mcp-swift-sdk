@@ -2643,9 +2643,347 @@ struct ProgressTests {
             #expect(workingStatus.isTerminal == false, "Working should not trigger cleanup")
         }
     }
+
+    // MARK: - Progress Token Injection Tests (Phase 0 Test Audit)
+
+    @Suite("Progress token injection")
+    struct ProgressTokenInjectionTests {
+        /// Test that existing _meta fields (other than progressToken) are preserved when the SDK injects a progressToken.
+        /// This verifies the encode-decode-mutate-encode pattern preserves other metadata.
+        @Test("Existing _meta fields are preserved when adding progressToken", .timeLimit(.minutes(1)))
+        func testMetaPreservation() async throws {
+            let (clientToServerRead, clientToServerWrite) = try FileDescriptor.pipe()
+            let (serverToClientRead, serverToClientWrite) = try FileDescriptor.pipe()
+
+            var logger = Logger(label: "mcp.test.meta.preserve")
+            logger.logLevel = .warning
+
+            let serverTransport = StdioTransport(
+                input: clientToServerRead,
+                output: serverToClientWrite,
+                logger: logger
+            )
+            let clientTransport = StdioTransport(
+                input: serverToClientRead,
+                output: clientToServerWrite,
+                logger: logger
+            )
+
+            // Track what _meta the server receives
+            let metaTracker = MetaFieldTracker()
+
+            let server = Server(
+                name: "MetaPreserveServer",
+                version: "1.0.0",
+                capabilities: .init(tools: .init())
+            )
+
+            await server.withRequestHandler(ListTools.self) { _, _ in
+                ListTools.Result(tools: [
+                    Tool(name: "meta_test", inputSchema: ["type": "object"]),
+                ])
+            }
+
+            await server.withRequestHandler(CallTool.self) { request, _ in
+                guard request.name == "meta_test" else {
+                    return CallTool.Result(content: [.text("Unknown")], isError: true)
+                }
+
+                // Record the _meta fields received by the server
+                if let meta = request._meta {
+                    await metaTracker.record(
+                        progressToken: meta.progressToken,
+                        additionalFields: meta.additionalFields
+                    )
+                }
+
+                return CallTool.Result(content: [.text("Done")])
+            }
+
+            let client = Client(name: "MetaPreserveClient", version: "1.0")
+
+            try await server.start(transport: serverTransport)
+            try await client.connect(transport: clientTransport)
+
+            // Create a request with existing _meta fields including a custom field
+            let requestId = RequestId.number(42)
+            let params = CallTool.Parameters(
+                name: "meta_test",
+                arguments: [:],
+                _meta: RequestMeta(
+                    progressToken: .string("user-provided-token"),
+                    additionalFields: ["customField": .string("custom-value")]
+                )
+            )
+            let request = CallTool.request(id: requestId, params)
+
+            // Send with a progress callback (which triggers injection)
+            _ = try await client.send(request, onProgress: { _ in })
+
+            // Verify what the server received
+            let receivedToken = await metaTracker.progressToken
+            let receivedFields = await metaTracker.additionalFields
+
+            // The SDK should overwrite the user-provided progressToken with the request ID
+            #expect(receivedToken == .integer(42), "progressToken should be the request ID (42), not user-provided value")
+
+            // Custom _meta fields should be preserved
+            #expect(receivedFields?["customField"] == .string("custom-value"), "Custom _meta fields should be preserved")
+        }
+
+        /// Test that SDK-generated progress token overwrites any user-provided progressToken.
+        /// Per TypeScript SDK behavior, the SDK always uses request ID as the progress token.
+        @Test("SDK-generated token overwrites user-provided progressToken", .timeLimit(.minutes(1)))
+        func testProgressTokenOverwrite() async throws {
+            let (clientToServerRead, clientToServerWrite) = try FileDescriptor.pipe()
+            let (serverToClientRead, serverToClientWrite) = try FileDescriptor.pipe()
+
+            var logger = Logger(label: "mcp.test.token.overwrite")
+            logger.logLevel = .warning
+
+            let serverTransport = StdioTransport(
+                input: clientToServerRead,
+                output: serverToClientWrite,
+                logger: logger
+            )
+            let clientTransport = StdioTransport(
+                input: serverToClientRead,
+                output: clientToServerWrite,
+                logger: logger
+            )
+
+            // Track what token the server receives
+            let tokenTracker = TokenTracker()
+
+            let server = Server(
+                name: "TokenOverwriteServer",
+                version: "1.0.0",
+                capabilities: .init(tools: .init())
+            )
+
+            await server.withRequestHandler(ListTools.self) { _, _ in
+                ListTools.Result(tools: [
+                    Tool(name: "overwrite_test", inputSchema: ["type": "object"]),
+                ])
+            }
+
+            await server.withRequestHandler(CallTool.self) { request, _ in
+                guard request.name == "overwrite_test" else {
+                    return CallTool.Result(content: [.text("Unknown")], isError: true)
+                }
+
+                // Record the token received by the server
+                if let token = request._meta?.progressToken {
+                    await tokenTracker.record(token)
+                }
+
+                return CallTool.Result(content: [.text("Done")])
+            }
+
+            let client = Client(name: "TokenOverwriteClient", version: "1.0")
+
+            try await server.start(transport: serverTransport)
+            try await client.connect(transport: clientTransport)
+
+            // Create a request with a user-provided progressToken
+            let requestId = RequestId.string("my-unique-request-id")
+            let params = CallTool.Parameters(
+                name: "overwrite_test",
+                arguments: [:],
+                _meta: RequestMeta(progressToken: .string("user-token-should-be-overwritten"))
+            )
+            let request = CallTool.request(id: requestId, params)
+
+            // Send with progress callback
+            _ = try await client.send(request, onProgress: { _ in })
+
+            // Verify the token the server received is the request ID, not the user-provided value
+            let receivedToken = await tokenTracker.token
+            #expect(
+                receivedToken == .string("my-unique-request-id"),
+                "progressToken should be the request ID, not user-provided value"
+            )
+        }
+
+        /// Test that requests with minimal params still get _meta.progressToken injected.
+        /// The SDK should create the _meta field if it doesn't exist.
+        @Test("Requests with minimal params get _meta.progressToken added", .timeLimit(.minutes(1)))
+        func testMinimalParamsRequestGetsProgressToken() async throws {
+            let (clientToServerRead, clientToServerWrite) = try FileDescriptor.pipe()
+            let (serverToClientRead, serverToClientWrite) = try FileDescriptor.pipe()
+
+            var logger = Logger(label: "mcp.test.minimal.params")
+            logger.logLevel = .warning
+
+            let serverTransport = StdioTransport(
+                input: clientToServerRead,
+                output: serverToClientWrite,
+                logger: logger
+            )
+            let clientTransport = StdioTransport(
+                input: serverToClientRead,
+                output: clientToServerWrite,
+                logger: logger
+            )
+
+            // Track what token the server receives
+            let tokenTracker = TokenTracker()
+
+            let server = Server(
+                name: "MinimalParamsServer",
+                version: "1.0.0",
+                capabilities: .init(tools: .init())
+            )
+
+            await server.withRequestHandler(ListTools.self) { _, _ in
+                ListTools.Result(tools: [
+                    Tool(name: "minimal_test", inputSchema: ["type": "object"]),
+                ])
+            }
+
+            await server.withRequestHandler(CallTool.self) { request, _ in
+                guard request.name == "minimal_test" else {
+                    return CallTool.Result(content: [.text("Unknown")], isError: true)
+                }
+
+                // Record the token - this tests that _meta.progressToken was created
+                if let token = request._meta?.progressToken {
+                    await tokenTracker.record(token)
+                }
+
+                return CallTool.Result(content: [.text("Done")])
+            }
+
+            let client = Client(name: "MinimalParamsClient", version: "1.0")
+
+            try await server.start(transport: serverTransport)
+            try await client.connect(transport: clientTransport)
+
+            // Create a request with minimal params (no _meta field originally)
+            let requestId = RequestId.number(99)
+            let params = CallTool.Parameters(
+                name: "minimal_test",
+                arguments: [:]
+                // Note: no _meta field - SDK should create it
+            )
+            let request = CallTool.request(id: requestId, params)
+
+            // Send with progress callback
+            _ = try await client.send(request, onProgress: { _ in })
+
+            // Verify the progress token was injected (derived from request ID)
+            let receivedToken = await tokenTracker.token
+            #expect(receivedToken == .integer(99), "progressToken should be the request ID (99)")
+        }
+
+        /// Test that progress callbacks are correctly invoked with the token derived from request ID.
+        /// This verifies the full round-trip: client sends with callback → server sends progress → callback invoked.
+        @Test(.timeLimit(.minutes(1)))
+        func testProgressCallbackMatchesByRequestId() async throws {
+            let (clientToServerRead, clientToServerWrite) = try FileDescriptor.pipe()
+            let (serverToClientRead, serverToClientWrite) = try FileDescriptor.pipe()
+
+            var logger = Logger(label: "mcp.test.progress.reqid")
+            logger.logLevel = .warning
+
+            let serverTransport = StdioTransport(
+                input: clientToServerRead,
+                output: serverToClientWrite,
+                logger: logger
+            )
+            let clientTransport = StdioTransport(
+                input: serverToClientRead,
+                output: clientToServerWrite,
+                logger: logger
+            )
+
+            let receivedTokens = TokenTracker()
+
+            let server = Server(
+                name: "TokenMatchServer",
+                version: "1.0.0",
+                capabilities: .init(tools: .init())
+            )
+
+            await server.withRequestHandler(ListTools.self) { _, _ in
+                ListTools.Result(tools: [
+                    Tool(name: "token_match_test", inputSchema: ["type": "object"]),
+                ])
+            }
+
+            await server.withRequestHandler(CallTool.self) { request, context in
+                guard request.name == "token_match_test" else {
+                    return CallTool.Result(content: [.text("Unknown")], isError: true)
+                }
+
+                // Server extracts the progress token and sends progress
+                if let token = request._meta?.progressToken {
+                    // Record what token we received
+                    await receivedTokens.record(token)
+                    // Send progress with the same token
+                    try await context.sendProgress(token: token, progress: 1, total: 1, message: "Done")
+                }
+
+                return CallTool.Result(content: [.text("Success")])
+            }
+
+            let client = Client(name: "TokenMatchClient", version: "1.0")
+
+            try await server.start(transport: serverTransport)
+            try await client.connect(transport: clientTransport)
+
+            // Use a specific request ID
+            let requestId = RequestId.number(12345)
+            let request = CallTool.request(
+                id: requestId,
+                .init(name: "token_match_test", arguments: [:])
+            )
+
+            let progressTracker = ProgressCallbackTracker()
+            _ = try await client.send(request, onProgress: { progress in
+                Task {
+                    await progressTracker.recordProgress(message: progress.message)
+                }
+            })
+
+            // Give time for progress notification
+            try await Task.sleep(for: .milliseconds(50))
+
+            // Verify server received the expected token (derived from request ID)
+            let serverToken = await receivedTokens.token
+            #expect(serverToken == .integer(12345), "Server should receive token matching request ID")
+
+            let wasReceived = await progressTracker.wasReceived
+            let receivedMessage = await progressTracker.lastMessage
+            #expect(wasReceived, "Progress callback should have been invoked")
+            #expect(receivedMessage == "Done", "Progress message should be 'Done'")
+        }
+    }
 }
 
 // MARK: - Test Helpers
+
+/// Tracker for progress callback invocations in tests.
+private actor ProgressCallbackTracker {
+    private(set) var wasReceived = false
+    private(set) var lastMessage: String?
+
+    func recordProgress(message: String?) {
+        wasReceived = true
+        lastMessage = message
+    }
+}
+
+/// Tracker for _meta fields received by server.
+private actor MetaFieldTracker {
+    private(set) var progressToken: ProgressToken?
+    private(set) var additionalFields: [String: Value]?
+
+    func record(progressToken: ProgressToken?, additionalFields: [String: Value]?) {
+        self.progressToken = progressToken
+        self.additionalFields = additionalFields
+    }
+}
 
 /// Tracker for progress tokens received by server.
 private actor TokenTracker {

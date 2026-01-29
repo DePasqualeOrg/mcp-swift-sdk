@@ -1,0 +1,77 @@
+// Copyright © Anthony DePasquale
+
+import Logging
+
+/// Helpers for building and validating server capabilities.
+///
+/// This enum namespace contains static functions for capability merging and validation.
+/// Unlike `ClientCapabilityHelpers`, the Server's capability inference is simpler since
+/// capabilities are typically set explicitly or auto-detected by MCPServer based on
+/// registration flags.
+enum ServerCapabilityHelpers {
+    /// Merge auto-detected capabilities with explicit base capabilities.
+    ///
+    /// Explicit base capabilities take precedence where provided.
+    /// Auto-detection only fills in `nil` fields.
+    ///
+    /// - Parameters:
+    ///   - base: Base capabilities (explicit overrides from initializer).
+    ///   - hasTools: Whether tools have been registered.
+    ///   - hasResources: Whether resources have been registered.
+    ///   - hasPrompts: Whether prompts have been registered.
+    /// - Returns: The merged capabilities.
+    static func merge(
+        base: Server.Capabilities,
+        hasTools: Bool,
+        hasResources: Bool,
+        hasPrompts: Bool
+    ) -> Server.Capabilities {
+        var capabilities = base
+
+        // Auto-detect only fills in nil fields; explicit overrides win
+        if capabilities.tools == nil, hasTools {
+            capabilities.tools = .init(listChanged: true)
+        }
+        if capabilities.resources == nil, hasResources {
+            capabilities.resources = .init(subscribe: false, listChanged: true)
+        }
+        if capabilities.prompts == nil, hasPrompts {
+            capabilities.prompts = .init(listChanged: true)
+        }
+
+        return capabilities
+    }
+
+    /// Validate that advertised capabilities have handlers registered.
+    ///
+    /// These are intentionally warnings (not errors) to support legitimate edge cases:
+    /// - Dynamic registration: capabilities advertised before handlers are registered
+    /// - Testing: advertise capabilities to test client behavior
+    ///
+    /// - Parameters:
+    ///   - capabilities: The capabilities that will be advertised to the client.
+    ///   - handlers: The registry of handlers.
+    ///   - logger: Optional logger for warnings.
+    static func validate(
+        _ capabilities: Server.Capabilities,
+        handlers: ServerHandlerRegistry,
+        logger: Logger?
+    ) {
+        // Check for capabilities advertised without handlers
+        if capabilities.tools != nil, handlers.methodHandlers[CallTool.name] == nil {
+            logger?.warning(
+                "Tools capability will be advertised but no tools/call handler is registered"
+            )
+        }
+        if capabilities.resources != nil, handlers.methodHandlers[ReadResource.name] == nil {
+            logger?.warning(
+                "Resources capability will be advertised but no resources/read handler is registered"
+            )
+        }
+        if capabilities.prompts != nil, handlers.methodHandlers[GetPrompt.name] == nil {
+            logger?.warning(
+                "Prompts capability will be advertised but no prompts/get handler is registered"
+            )
+        }
+    }
+}
