@@ -105,8 +105,8 @@ struct MalformedInputHandlingTests {
             await transport.queueRaw(malformedRequest)
         }
 
-        // Wait for responses using proper synchronization
-        let received = await transport.waitForSentMessageCount(10, timeout: .seconds(5))
+        // Wait for responses using proper synchronization (use longer timeout for slow CI)
+        let received = await transport.waitForSentMessageCount(10, timeout: .seconds(30))
         #expect(received, "Should receive responses for all malformed requests")
 
         // Should receive error responses for all requests

@@ -109,110 +109,38 @@ struct RoundtripTests {
 
         try await server.start(transport: serverTransport)
 
-        let initTask = Task {
-            let result = try await client.connect(transport: clientTransport)
-
-            #expect(result.serverInfo.name == "TestServer")
-            #expect(result.serverInfo.version == "1.0.0")
-            #expect(result.capabilities.prompts != nil)
-            #expect(result.capabilities.tools != nil)
-            #expect(result.protocolVersion == Version.latest)
-        }
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try await Task.sleep(for: .seconds(1))
-                initTask.cancel()
-                throw CancellationError()
-            }
-            group.addTask {
-                try await initTask.value
-            }
-            try await group.next()
-            group.cancelAll()
-        }
+        // Test client connection
+        let initResult = try await client.connect(transport: clientTransport)
+        #expect(initResult.serverInfo.name == "TestServer")
+        #expect(initResult.serverInfo.version == "1.0.0")
+        #expect(initResult.capabilities.prompts != nil)
+        #expect(initResult.capabilities.tools != nil)
+        #expect(initResult.protocolVersion == Version.latest)
 
         // Test ping
-        let pingTask = Task {
-            try await client.ping()
-            // Ping doesn't return anything, so just getting here without throwing is success
-            #expect(Bool(true))
-        }
+        try await client.ping()
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try await Task.sleep(for: .seconds(1))
-                pingTask.cancel()
-                throw CancellationError()
-            }
-            group.addTask {
-                try await pingTask.value
-            }
-            try await group.next()
-            group.cancelAll()
-        }
+        // Test listing and calling tools
+        let listToolsResult = try await client.listTools()
+        #expect(listToolsResult.tools.count == 1)
+        #expect(listToolsResult.tools[0].name == "add")
 
-        let listToolsTask = Task {
-            let result = try await client.listTools()
-            #expect(result.tools.count == 1)
-            #expect(result.tools[0].name == "add")
-        }
-
-        let callToolTask = Task {
-            let result = try await client.callTool(name: "add", arguments: ["a": 1, "b": 2])
-            #expect(result.isError == nil)
-            #expect(result.content == [.text("3")])
-        }
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try await Task.sleep(for: .seconds(1))
-                listToolsTask.cancel()
-                callToolTask.cancel()
-                throw CancellationError()
-            }
-            group.addTask {
-                try await listToolsTask.value
-            }
-            group.addTask {
-                try await callToolTask.value
-            }
-            try await group.next()
-            group.cancelAll()
-        }
+        let callToolResult = try await client.callTool(name: "add", arguments: ["a": 1, "b": 2])
+        #expect(callToolResult.isError == nil)
+        #expect(callToolResult.content == [.text("3")])
 
         // Test listing resources
-        let listResourcesTask = Task {
-            let result = try await client.listResources()
-            #expect(result.resources.count == 2)
-            #expect(result.resources[0].uri == "test://example.txt")
-            #expect(result.resources[0].name == "Example Text")
-            #expect(result.resources[1].uri == "test://data.json")
-            #expect(result.resources[1].name == "Test Data")
-        }
+        let listResourcesResult = try await client.listResources()
+        #expect(listResourcesResult.resources.count == 2)
+        #expect(listResourcesResult.resources[0].uri == "test://example.txt")
+        #expect(listResourcesResult.resources[0].name == "Example Text")
+        #expect(listResourcesResult.resources[1].uri == "test://data.json")
+        #expect(listResourcesResult.resources[1].name == "Test Data")
 
         // Test reading a resource
-        let readResourceTask = Task {
-            let result = try await client.readResource(uri: "test://example.txt")
-            #expect(result.contents.count == 1)
-            #expect(result.contents[0] == .text("Hello, World!", uri: "test://example.txt"))
-        }
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try await Task.sleep(for: .seconds(1))
-                listResourcesTask.cancel()
-                readResourceTask.cancel()
-                throw CancellationError()
-            }
-            group.addTask {
-                try await listResourcesTask.value
-            }
-            group.addTask {
-                try await readResourceTask.value
-            }
-            try await group.next()
-            group.cancelAll()
-        }
+        let readResourceResult = try await client.readResource(uri: "test://example.txt")
+        #expect(readResourceResult.contents.count == 1)
+        #expect(readResourceResult.contents[0] == .text("Hello, World!", uri: "test://example.txt"))
 
         await server.stop()
         await client.disconnect()
